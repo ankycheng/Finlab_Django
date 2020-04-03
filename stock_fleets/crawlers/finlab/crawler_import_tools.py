@@ -9,6 +9,9 @@ from django.core.exceptions import ObjectDoesNotExist
 from sqlalchemy import create_engine
 import json5
 
+"""""
+資料庫設定
+"""""
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__))).replace('/crawlers', '')
 with open(os.path.join(BASE_DIR, "config.json"), 'r', encoding='utf8') as file:
     CONFIG_DATA = json5.load(file)
@@ -17,13 +20,28 @@ connect_info = 'mysql+pymysql://{}:{}@{}:{}/{}?charset=utf8'.format(CONFIG_DATA[
                                                                     CONFIG_DATA['DBNAME'])
 engine = create_engine(connect_info)
 
+"""""
+日單位集合產生器
+"""""
+
 
 def date_range(start_date, end_date):
+    # Todo
     return [dt.date() for dt in rrule(DAILY, dtstart=start_date, until=end_date)]
+
+
+"""""
+月單位集合產生器
+"""""
 
 
 def month_range(start_date, end_date):
     return [dt.date() for dt in rrule(MONTHLY, dtstart=start_date, until=end_date)]
+
+
+"""""
+季單位集合產生器
+"""""
 
 
 def season_range(start_date, end_date):
@@ -44,19 +62,45 @@ def season_range(start_date, end_date):
     return ret
 
 
+"""""
+Table存在判斷
+"""""
+
+
 def table_exist(conn, table):
     return list(conn.execute(
         "select count(*) from information_schema.tables where TABLE_NAME=" + "'" + table + "'"))[0][0] == 1
 
 
+"""""
+Table最新資料日
+"""""
+
+
 def table_latest_date(conn, table):
-    cursor = list(conn.execute('SELECT date FROM ' + table + ' ORDER BY date DESC LIMIT 1;'))
-    return cursor[0][0]
+    try:
+        cursor = list(conn.execute('SELECT date FROM ' + table + ' ORDER BY date DESC LIMIT 1;'))
+        return cursor[0][0]
+    except IndexError:
+        return print("No Data")
+
+
+"""""
+Table最早資料日
+"""""
 
 
 def table_earliest_date(conn, table):
-    cursor = list(conn.execute('SELECT date FROM ' + table + ' ORDER BY date ASC LIMIT 1;'))
-    return cursor[0][0]
+    try:
+        cursor = list(conn.execute('SELECT date FROM ' + table + ' ORDER BY date ASC LIMIT 1;'))
+        return cursor[0][0]
+    except IndexError:
+        return print("No Data")
+
+
+"""""
+Table日期存在判斷
+"""""
 
 
 def in_date_list(conn, model_name, check_date):
@@ -66,6 +110,11 @@ def in_date_list(conn, model_name, check_date):
         return True
     else:
         return False
+
+
+"""""
+Dataframe匯入DB
+"""""
 
 
 def add_to_sql(model_name, df):
@@ -128,17 +177,24 @@ def add_to_sql(model_name, df):
     print(f"Finish{' '}{model_name}{'bulk_update'}{':'}{len(bulk_update_data)}")
 
 
+"""""
+爬蟲執行物件
+"""""
+
+
 class CrawlerProcess:
 
-    def __init__(self, func, model_name):
+    def __init__(self, func, model_name, range_date):
         self.crawler_func_name = func
         self.model_name = model_name
         self.table_latest_date = table_latest_date(engine, self.model_name._meta.db_table)
+        self.range_date = range_date
 
     def __repr__(self):
         return str(self.model_name._meta.db_table) + ' ' + "table_latest_date:" + str(self.table_latest_date)
 
     def crawl_process(self, date_list: list):
+
         for d in date_list:
             df = self.crawler_func_name(d)
             try:
@@ -152,44 +208,63 @@ class CrawlerProcess:
             time.sleep(12)
 
     # 指定區間，主要為測試用
-    def specified_date_crawl(self, start_date: str, end_date: str, range_date=date_range):
+    def specified_date_crawl(self, start_date: str, end_date: str):
 
         start_date = datetime.datetime.strptime(start_date, "%Y-%m-%d")
-        end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d")
+
         try:
             if (start_date - end_date).days <= 0:
-                date_list = range_date(start_date, end_date)
+                if self.range_date == 'date_range':
+                    end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d")
+                    date_list = date_range(start_date, end_date)[1:]
+                elif self.range_date == 'month_range':
+                    end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d") + datetime.timedelta(days=45)
+                    date_list = month_range(start_date, end_date)
+                    date_list = date_list
+                else:
+                    return None
+
                 self.crawl_process(date_list)
             else:
                 print(f"The start_date > your end_date,please modify your start_date <={end_date} .")
-                return None
+
         except ValueError:
             print('Error:last_day form is %Y-%m-%d,please modify. ')
             return None
 
-            # 自動爬取結尾後日期的資料
-
+    # 進度判斷
     def working_process(self):
         recent = datetime.datetime.now()
         day_num = (recent - self.table_latest_date).days
-        if day_num > 0:
-            return 0
-        elif day_num == 0:
-            return 1
-        else:
-            return 2
+        if self.range_date == 'date_range':
+            if day_num > 0:
+                return 0
+            elif day_num == 0:
+                return 1
+            else:
+                return 2
 
-    def auto_update_crawl(self, last_day='Now', range_date=date_range):
+        elif self.range_date == 'month_range':
+            return 0
+
+    # 自動爬取結尾後日期的資料
+    def auto_update_crawl(self, last_day='Now'):
 
         try:
             if last_day == 'Now':
-                end_date = datetime.datetime.now()
+                end_date = datetime.datetime.now() + datetime.timedelta(days=45)
             else:
-                end_date = datetime.datetime.strptime(last_day, "%Y-%m-%d")
+                end_date = datetime.datetime.strptime(last_day, "%Y-%m-%d") + datetime.timedelta(days=45)
 
             if self.working_process() == 0:
                 start_date = self.table_latest_date
-                date_list = range_date(start_date, end_date)
+                if self.range_date == 'date_range':
+                    # [1:] avoid same index,let program be faster
+                    date_list = date_range(start_date, end_date)[1:]
+                elif self.range_date == 'month_range':
+                    date_list = month_range(start_date, end_date)
+                else:
+                    date_list = season_range(start_date, end_date)
                 self.crawl_process(date_list)
 
             elif self.working_process() == 1:
@@ -198,6 +273,7 @@ class CrawlerProcess:
             else:
                 print(f"The table_latest_date > your setting date,please modify your setting date >{last_day} .")
                 return None
+
         except ValueError:
             print('Error:last_day form is %Y-%m-%d,please modify. ')
             return None
