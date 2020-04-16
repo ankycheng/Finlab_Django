@@ -137,6 +137,7 @@ def add_to_sql(model_name, df):
                 obj_create_data = dict((field.name, item[field.name]) for field in columns_list)
                 obj_create = model_name(**obj_create_data)
                 bulk_create_data.append(obj_create)
+                print(f"create{' '}{' '}Stock_id:{item['stock_id']}")
 
             except Exception as e:
                 print(f"error{' '}{e}{' '}Stock_id:{item['stock_id']}")
@@ -160,12 +161,14 @@ def add_to_sql(model_name, df):
                     setattr(obj_check, attribute, update_value)
 
                 bulk_update_data.append(obj_check)
+                print(f"update{' '}{' '}Stock_id:{item['stock_id']}")
 
             # Use dict to bulk_create obj when get nothing ,process incomplete data
             except ObjectDoesNotExist:
                 obj_create_data = dict((field.name, item[field.name]) for field in columns_list)
                 obj_create = model_name(**obj_create_data)
                 bulk_create_data.append(obj_create)
+                print(f"create{' '}{' '}Stock_id:{item['stock_id']}")
 
             except Exception as e:
                 print(f"error{' '}{e}{' '}Stock_id:{item['stock_id']}")
@@ -190,8 +193,9 @@ def add_to_sql(model_name, df):
 
 class CrawlerProcess:
 
-    def __init__(self, func, model_name, range_date):
-        self.crawler_func_name = func
+    def __init__(self, crawl_class, crawl_method, model_name, range_date):
+        self.crawl_class = crawl_class
+        self.crawl_method = crawl_method
         self.model_name = model_name
         self.table_latest_date = table_latest_date(engine, self.model_name._meta.db_table)
         self.range_date = range_date
@@ -202,7 +206,7 @@ class CrawlerProcess:
     def crawl_process(self, date_list: list):
 
         for d in date_list:
-            df = self.crawler_func_name(d)
+            df = getattr(self.crawl_class(d), self.crawl_method)()
             try:
                 ret = df.drop_duplicates(['stock_id', 'date'], keep='last')
                 add_to_sql(self.model_name, ret)
@@ -228,6 +232,7 @@ class CrawlerProcess:
                     date_list = month_range(start_date, end_date)
                     date_list = date_list
                 else:
+                    print(f"Finish Update Work")
                     return None
 
                 self.crawl_process(date_list)
@@ -235,7 +240,7 @@ class CrawlerProcess:
                 print(f"The start_date > your end_date,please modify your start_date <={end_date} .")
 
         except ValueError:
-            print('Error:last_day form is %Y-%m-%d,please modify or df include NaTType,it does not support utcoffset ')
+            print('Error:last_day form is %Y-%m-%d or df include NaTType,it does not support utcoffset ')
             return None
 
     # 進度判斷

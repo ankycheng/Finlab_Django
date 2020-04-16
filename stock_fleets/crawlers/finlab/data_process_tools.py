@@ -7,9 +7,9 @@ import datetime
 
 def year_transfer(t):
     try:
-        date = str(int(t[:t.index("/")])+1911)+t[t.index("/"):].replace('/','-')
-    except:
-        date=None
+        date = str(int(t[:t.index("/")]) + 1911) + t[t.index("/"):].replace('/', '-')
+    except ValueError:
+        date = None
     return date
 
 
