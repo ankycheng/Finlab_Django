@@ -2,8 +2,6 @@ import datetime
 import time
 import os
 import pandas as pd
-from tqdm import tnrange, tqdm_notebook
-from datetime import date
 from dateutil.rrule import rrule, DAILY, MONTHLY
 from django.core.exceptions import ObjectDoesNotExist
 from sqlalchemy import create_engine
@@ -106,9 +104,13 @@ Table日期存在判斷
 def in_date_list(conn, model_name, check_date):
     table = model_name._meta.db_table
     cursor = list(conn.execute("SELECT date FROM " + table + " where date ='" + check_date + "'"))
-    if len(cursor) > 0:
-        return True
-    else:
+    try:
+        if len(cursor) > 0:
+            return True
+        else:
+            return False
+    except IndexError:
+        print("No Data in table,start to init import table. ")
         return False
 
 

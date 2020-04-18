@@ -1,6 +1,5 @@
 from django.contrib import admin
 from .models import CompanyBasicInfoTW
-import datetime
 
 """
 後台資料庫管理

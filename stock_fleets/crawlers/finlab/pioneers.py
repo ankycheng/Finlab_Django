@@ -3,7 +3,6 @@ from io import StringIO
 import requests
 import datetime
 from crawlers.finlab.data_process_tools import year_transfer, last_month
-import time
 
 """""
 爬蟲-台股上市櫃股價
@@ -16,6 +15,7 @@ class CrawlStockPriceTW:
         self.date_str = date.strftime("%Y%m%d")
         self.target_name = "台股每日交易資訊"
         self.sub_market = ["sii", "otc", "rotc"]
+        self.format = "time_series"
 
     def crawl_sii(self):
 
@@ -148,6 +148,7 @@ class CrawlMonthlyRevnueTW:
         self.date = date
         self.target_name = "台股月營收資訊"
         self.sub_market = ["sii", "otc", "rotc"]
+        self.format = "time_series"
 
     def crawl_main(self):
         url_date = last_month(self.date)
@@ -220,6 +221,7 @@ class CrawlCompanyBasicInfoTW:
     def __init__(self):
         self.target_name = "台股企業基本資訊"
         self.sub_market = ["sii", "otc", "rotc"]
+        self.format = "non_time_series"
 
     def crawl_main(self):
         data = []
