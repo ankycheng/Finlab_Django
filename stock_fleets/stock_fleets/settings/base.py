@@ -10,13 +10,14 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/2.2/ref/settings/
 """
 
-import os,json5
+import os
+import json5
 import pymysql
+
 pymysql.install_as_MySQLdb()
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/2.2/howto/deployment/checklist/
@@ -28,7 +29,6 @@ SECRET_KEY = 'p!p&s4)$zqv7!as#gfq)kt7it*al60_*!cg%xfkr7e0+rvt@=k'
 DEBUG = True
 
 ALLOWED_HOSTS = []
-
 
 # Application definition
 
@@ -74,28 +74,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'stock_fleets.wsgi.application'
 
-
-# Database
-# https://docs.djangoproject.com/en/2.2/ref/settings/#databases
-
-with open(os.path.join(BASE_DIR, "config.json"), 'r', encoding='utf8') as file:
-    CONFIG_DATA = json5.load(file)
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': CONFIG_DATA['DBNAME'],
-        'USER': CONFIG_DATA['DBACCOUNT'],
-        'PASSWORD': CONFIG_DATA['DBPASSWORD'],
-        'HOST': CONFIG_DATA['DBHOST'],
-        'PORT': CONFIG_DATA['DBPORT'],
-        'OPTIONS': {
-            'charset': 'utf8mb4',
-            'use_unicode': True,                                                            
-        }
-    }
-}
-
-
 # Password validation
 # https://docs.djangoproject.com/en/2.2/ref/settings/#auth-password-validators
 
@@ -114,7 +92,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/2.2/topics/i18n/
 
@@ -127,7 +104,6 @@ USE_I18N = False
 USE_L10N = False
 
 USE_TZ = False
-
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/2.2/howto/static-files/

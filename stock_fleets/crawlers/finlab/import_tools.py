@@ -2,20 +2,31 @@ import datetime
 import time
 import os
 import pandas as pd
+import json5
 from dateutil.rrule import rrule, DAILY, MONTHLY
 from django.core.exceptions import ObjectDoesNotExist
+from django.conf import settings
 from sqlalchemy import create_engine
-import json5
 
 """""
 資料庫設定
 """""
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__))).replace('/crawlers', '')
+BASE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'stock_fleets')
 with open(os.path.join(BASE_DIR, "config.json"), 'r', encoding='utf8') as file:
     CONFIG_DATA = json5.load(file)
-connect_info = 'mysql+pymysql://{}:{}@{}:{}/{}?charset=utf8'.format(CONFIG_DATA['DBACCOUNT'], CONFIG_DATA['DBPASSWORD'],
-                                                                    CONFIG_DATA['DBHOST'], CONFIG_DATA['DBPORT'],
-                                                                    CONFIG_DATA['DBNAME'])
+# 資料庫連線
+dbName = (
+    settings.CONFIG_DATA.get("DBNAME")
+    if settings.CONFIG_DATA.get("PRODUCTION")
+    else settings.CONFIG_DATA.get("DBNAME_DEV")
+)
+connect_info = "mysql+pymysql://{}:{}@{}:{}/{}?charset=utf8".format(
+    settings.CONFIG_DATA.get("DBACCOUNT"),
+    settings.CONFIG_DATA.get("DBPASSWORD"),
+    settings.CONFIG_DATA.get("DBHOST"),
+    settings.CONFIG_DATA.get("DBPORT"),
+    dbName,
+)
 engine = create_engine(connect_info)
 
 """""
@@ -120,6 +131,7 @@ Dataframe匯入DB,適用時間序列資料
 
 
 def add_to_sql(model_name, df):
+    df = df.where(pd.notnull(df), None)
     bulk_update_data = []
     bulk_create_data = []
     columns_list = model_name._meta.fields[1:]
@@ -217,7 +229,7 @@ class CrawlerProcess:
             # holiday is blank
             except AttributeError:
                 print(f'fail, check if {d} is a holiday')
-            time.sleep(12)
+            time.sleep(10)
 
     # 指定區間，主要為初始化table和測試用
     def specified_date_crawl(self, start_date: str, end_date: str):

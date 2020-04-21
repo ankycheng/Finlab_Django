@@ -38,8 +38,6 @@ class CrawlStockPriceTW:
                                 "成交股數": "turnover_vol", "成交金額": "turnover_price",
                                 "開盤價": "open_price", "收盤價": "close_price",
                                 "最高價": "high_price", "最低價": "low_price"})
-        df = df.where(pd.notnull(df), None)
-
         return df
 
     @staticmethod
@@ -86,7 +84,6 @@ class CrawlStockPriceTW:
                                 "最高": "high_price", "最低": "low_price"})
         df.iloc[:, 3:] = df.iloc[:, 3:].apply(lambda s: pd.to_numeric(s, errors="coerce"))
         df = df[df["turnover_vol"] >= 0]
-        df = df.where(pd.notnull(df), None)
 
         return df
 
@@ -127,7 +124,6 @@ class CrawlStockPriceTW:
         # solve " "
         df["stock_id"] = df["stock_id"].apply(lambda s: s[:4])
         df = df[df["stock_id"] != "合計"]
-        df = df.where(pd.notnull(df), None)
         return df
 
     def crawl_main(self):
@@ -279,3 +275,179 @@ class CrawlCompanyBasicInfoTW:
         df3["update_time"] = datetime.datetime.now()
         df3 = df3.fillna('')
         return df3
+
+
+"""""
+爬蟲-台股上市櫃各類股指數值
+"""""
+
+
+class CrawlStockIndexPriceTW:
+    def __init__(self, date):
+        self.date = date
+        self.date_str = date.strftime("%Y%m%d")
+        self.target_name = "台股指數資訊"
+        self.sub_market = ["sii", "otc"]
+
+    def sii_index(self):
+
+        r = requests.post(
+            'http://www.twse.com.tw/exchangeReport/MI_INDEX?response=csv&date=' + self.date_str + '&type=IND')
+
+        content = r.text.replace('=', '')
+        lines = content.split('\n')
+        lines = list(filter(lambda l: len(l.split('",')) > 5, lines))
+        content = "\n".join(lines)
+        if content == '':
+            return None
+        df = pd.read_csv(StringIO(content))
+        df = df.astype(str)
+        df = df.apply(lambda s: s.str.replace(',', ''))
+        df = df.rename(columns={'指數': 'stock_id', '收盤指數': 'index_price',
+                                '漲跌百分比(%)': 'quote_change'})
+        df['date'] = pd.to_datetime(self.date)
+        df['stock_id'] = df['stock_id'].apply(lambda s: '上市' + s)
+        df.loc[:, ['index_price', 'quote_change']] = df.loc[:, ['index_price', 'quote_change']].apply(
+            lambda s: pd.to_numeric(s, errors='coerce'))
+
+        df_all = df.loc[:, ['stock_id', 'date', 'index_price', 'quote_change']]
+        df_all = df_all.dropna()
+
+        return df_all
+
+    def otc_index(self):
+
+        y = str(int(self.date.strftime("%Y")) - 1911)
+        date_str = y + "/" + self.date.strftime("%m") + "/" + self.date.strftime("%d")
+        link = 'http://www.tpex.org.tw/web/stock/aftertrading/index_summary/summary_download.php?l=zh-tw&d=' + \
+               date_str + '&s=0,asc,0'
+        r = requests.get(link)
+
+        lines = r.text.replace("\r", "").split("\n")
+        try:
+            df = pd.read_csv(StringIO("\n".join(lines[3:])), header=None)
+        except pd.errors.ParserError:
+            return None
+        df.columns = list(map(lambda s: s.replace(" ", ""), lines[2].split(",")))
+        df = df.apply(lambda s: s.str.replace(",", ""))
+
+        df['stock_id'] = '上櫃' + (df['指數'].apply(lambda s: s.replace('指數', ''))) + '指數'
+
+        # 第二個櫃買指數以下的才是報酬指數，找出第二個，各年指數項目不同使用find來定位
+        rem_loc = df['指數'].str.find('櫃買指數')
+        rem_loc = (rem_loc[rem_loc > -1].index.tolist())[-1]
+
+        # 一般指數
+        df_normal = df.iloc[:rem_loc]
+        # 報酬指數
+        df_rem = df.iloc[rem_loc:]
+
+        # 合併
+        df_all = pd.concat([df_normal, df_rem])
+        df_all = df_all.rename(columns={'收市指數': 'index_price', '漲跌幅度': 'quote_change'})
+        df_all.loc[:, ['index_price', 'quote_change']] = df_all.loc[:, ['index_price', 'quote_change']].apply(
+            lambda s: pd.to_numeric(s, errors='coerce'))
+        df_all['date'] = pd.to_datetime(self.date)
+        df_all = df_all.loc[:, ['stock_id', 'date', 'index_price', 'quote_change']]
+        df_all = df_all.dropna()
+        return df_all
+
+    def crawl_main(self):
+        try:
+            df = pd.concat([self.sii_index(), self.otc_index()], sort=False)
+        except ValueError:
+            return None
+        return df
+
+
+"""""
+爬蟲-台股上市櫃各類股指數成交量
+"""""
+
+
+class CrawlStockIndexVolTW:
+    def __init__(self, date):
+        self.date = date
+        self.date_str = date.strftime("%Y%m%d")
+        self.target_name = "台股指數成交量資訊"
+        self.sub_market = ["sii", "otc"]
+
+    def sii_vol(self):
+
+        r = requests.post('http://www.twse.com.tw/exchangeReport/BFIAMU?response=csv&date=' + self.date_str)
+
+        content = r.text.replace('=', '')
+
+        lines = content.split('\n')
+        lines = list(filter(lambda l: len(l.split('",')) > 4, lines))
+
+        content = "\n".join(lines)
+        if content == '':
+            return None
+        df = pd.read_csv(StringIO(content))
+        df = df.astype(str)
+        df = df.apply(lambda s: s.str.replace(',', ''))
+
+        df = df.rename(
+            columns={'分類指數名稱': 'stock_id', '成交股數': 'turnover_vol', '成交金額': 'turnover_price', '成交筆數': 'turnover_num'})
+        df['date'] = pd.to_datetime(self.date)
+        df.loc[:, ['turnover_vol', 'turnover_price', 'turnover_num']] = df.loc[:, ['turnover_vol', 'turnover_price',
+                                                                                   'turnover_num']].apply(
+            lambda s: pd.to_numeric(s, errors='coerce'))
+        df = df.drop(columns=['漲跌指數', 'Unnamed: 5'])
+        df['stock_id'] = df['stock_id'].apply(lambda s: '上市' + s)
+        return df
+
+    def sii_statistic(self):
+        r = requests.post(
+            'http://www.twse.com.tw/exchangeReport/MI_INDEX?response=csv&date=' + self.date_str + '&type=MS')
+        content = r.text.replace('=', '')
+
+        lines = content.split('\n')
+        lines = list(filter(lambda l: len(l.split('",')) < 6, lines))
+        lines = lines[1:]
+
+        content = "\n".join(lines)
+        if content == '':
+            return None
+        df = pd.read_csv(StringIO(content))
+        df = df.astype(str)
+        df = df.apply(lambda s: s.str.replace(',', ''))
+        df = df.rename(columns={'成交統計': 'stock_id', '成交金額(元)': 'turnover_price',
+                                '成交股數(股)': 'turnover_vol', '成交筆數': 'turnover_num'})
+        df = df.drop(columns={'Unnamed: 4'})
+        df['date'] = pd.to_datetime(self.date)
+        df.iloc[:, 1:4] = df.iloc[:, 1:4].apply(lambda s: pd.to_numeric(s, errors='coerce'))
+        df = df.dropna()
+        df['stock_id'] = df['stock_id'].apply(lambda s: '上市' + s[s.index(".") + 1:] if "." in s else '上市' + s)
+        return df
+
+    def otc_statistic(self):
+        y = str(int(self.date.strftime("%Y")) - 1911)
+        date_str = y + "/" + self.date.strftime("%m") + "/" + self.date.strftime("%d")
+        link = 'https://www.tpex.org.tw/web/stock/aftertrading/market_statistics/statistics_result.php?l=zh-tw&t=D&o=' \
+               'htm&d=' + date_str
+        r = requests.get(link)
+        lines = r.text.replace("\r", "").split("\n")
+        if len(lines) < 35:
+            return None
+        df = pd.read_html(StringIO("\n".join(lines[3:])), header=None)[0]
+        df = pd.DataFrame(df)
+        df.columns = df.columns.get_level_values(1)
+        df = df.astype(str)
+        df = df.apply(lambda s: s.str.replace(',', ''))
+        df = df.rename(columns={'成交統計': 'stock_id', '成交金額(元)': 'turnover_price',
+                                '成交股數(股)': 'turnover_vol', '成交筆數': 'turnover_num'})
+        df = df.loc[:, ['stock_id', 'turnover_vol', 'turnover_price', 'turnover_num']]
+        df['date'] = pd.to_datetime(self.date)
+        df.iloc[:, 1:4] = df.iloc[:, 1:4].apply(lambda s: pd.to_numeric(s, errors='coerce'))
+        df = df.dropna()
+        df['stock_id'] = df['stock_id'].apply(lambda s: '上櫃' + s[s.index(".") + 1:] if "." in s else '上櫃' + s)
+        return df
+
+    def crawl_main(self):
+        try:
+            df = pd.concat([self.sii_vol(), self.sii_statistic(), self.otc_statistic()], sort=False)
+        except ValueError:
+            return None
+        return df

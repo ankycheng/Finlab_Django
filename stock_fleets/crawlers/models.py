@@ -79,3 +79,18 @@ class CompanyBasicInfoTW(models.Model):
     # custom fields  short_description
     market.fget.short_description = '市場別'
     stock_issued_num.fget.short_description = '發行股票張數'
+
+
+class StockIndexPriceTW(models.Model):
+    stock_id = models.CharField(max_length=100, verbose_name="證券代號")
+    date = models.DateTimeField(verbose_name="資料日期")
+    index_price = models.FloatField(blank=True, null=True, verbose_name="指數點數")
+    quote_change = models.FloatField(blank=True, null=True, verbose_name="漲跌百分比")
+
+
+class StockIndexVolTW(models.Model):
+    stock_id = models.CharField(max_length=100, verbose_name="證券代號")
+    date = models.DateTimeField(verbose_name="資料日期")
+    turnover_vol = models.FloatField(blank=True, null=True, verbose_name="成交股數")
+    turnover_price = models.FloatField(blank=True, null=True, verbose_name="成交金額")
+    turnover_num = models.BigIntegerField(blank=True, null=True, verbose_name="成交筆數")
