@@ -7,7 +7,6 @@ from dateutil.rrule import rrule, DAILY, MONTHLY
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.conf import settings
 from sqlalchemy import create_engine
-from crawlers.finlab.pioneers import GetNTLSxy
 from django.db import models
 
 """""
@@ -159,7 +158,6 @@ def add_to_sql(model_name, df, *fk_columns):
         columns_list.remove(i)
     bulk_update_data = []
     bulk_create_data = []
-    # columns_list = model_name._meta.fields[1:]
 
     # if data_date isn't in table,process bulk_create
     if 'date' in columns_list:
@@ -220,10 +218,10 @@ def add_to_sql(model_name, df, *fk_columns):
             # Use dict to bulk_create obj when get nothing ,process incomplete data
             except ObjectDoesNotExist:
                 obj_create_data = dict((field, item[field]) for field in columns_list)
-                obj_create = model_name(**obj_create_data)
                 # 處理ForeignKey
                 if len(fk_columns) > 0:
                     obj_create_data.update(fk_import(model_name, item, fk_columns))
+                obj_create = model_name(**obj_create_data)
                 bulk_create_data.append(obj_create)
                 print(f"create{' '}{' '}Stock_id:{item['stock_id']}")
 
@@ -245,37 +243,52 @@ def add_to_sql(model_name, df, *fk_columns):
 
 """""
 爬蟲執行物件,適用時間序列資料
+Attributes:
+range_date-爬蟲週期
+nest-巢狀爬蟲，一日內執行多次，分次輸入，不用整併每日後再輸入，避免中斷白工
+*fk_columns-需import的外鍵值
 """""
 
 
 class CrawlerProcess:
 
-    def __init__(self, crawl_class, crawl_method, model_name, range_date):
+    def __init__(self, crawl_class, crawl_method, model_name, range_date, nest=False, *fk_columns):
         self.crawl_class = crawl_class
         self.crawl_method = crawl_method
         self.model_name = model_name
         self.table_latest_date = table_latest_date(engine, self.model_name._meta.db_table)
         self.range_date = range_date
+        self.nest = nest
+        self.fk_columns = fk_columns
 
     def __repr__(self):
         return str(self.model_name._meta.db_table) + ' ' + "table_latest_date:" + str(self.table_latest_date)
 
-    def crawl_process(self, date_list: list, *fk_columns):
+    def crawl_process(self, date_list: list):
 
         for d in date_list:
-            df = getattr(self.crawl_class(d), self.crawl_method)()
-            try:
-                ret = df.drop_duplicates(['stock_id', 'date'], keep='last')
-                add_to_sql(self.model_name, ret, *fk_columns)
-                print(f'Finish {d} Data')
+            if self.nest is False:
+                df = getattr(self.crawl_class(d), self.crawl_method)()
+                try:
+                    ret = df.drop_duplicates(['stock_id', 'date'], keep='last')
+                    add_to_sql(self.model_name, ret, *self.fk_columns)
+                    print(f'Finish {d} Data')
 
-            # holiday is blank
-            except AttributeError:
-                print(f'fail, check if {d} is a holiday')
-            time.sleep(10)
+                # holiday is blank
+                except AttributeError:
+                    print(f'fail, check if {d} is a holiday')
+            else:
+                try:
+                    df = getattr(self.crawl_class(d), self.crawl_method)()
+                    if df is False:
+                        print(f'fail, check if {d} is a holiday')
+                # holiday is blank
+                except AttributeError:
+                    print(f'fail, check if {d} is a holiday')
+            time.sleep(8)
 
     # 指定區間，主要為初始化table和測試用
-    def specified_date_crawl(self, start_date: str, end_date: str, *fk_columns):
+    def specified_date_crawl(self, start_date: str, end_date: str):
 
         start_date = datetime.datetime.strptime(start_date, "%Y-%m-%d")
         end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d")
@@ -292,7 +305,7 @@ class CrawlerProcess:
                     print(f"Finish Update Work")
                     return None
 
-                self.crawl_process(date_list, *fk_columns)
+                self.crawl_process(date_list)
             else:
                 print(f"The start_date > your end_date,please modify your start_date <={end_date} .")
 
@@ -320,7 +333,7 @@ class CrawlerProcess:
             return -1
 
     # 自動爬取結尾後日期的資料
-    def auto_update_crawl(self, last_day='Now', *fk_columns):
+    def auto_update_crawl(self, last_day='Now'):
 
         try:
             if last_day == 'Now':
@@ -342,7 +355,7 @@ class CrawlerProcess:
                     date_list = month_range(start_date, end_date)
                 else:
                     date_list = season_range(start_date, end_date)
-                self.crawl_process(date_list, *fk_columns)
+                self.crawl_process(date_list)
 
             elif self.working_process() == 1:
                 print(f"Finish Update Work")
@@ -357,28 +370,3 @@ class CrawlerProcess:
         except ValueError:
             print('Error:last_day form is %Y-%m-%d,please modify. ')
             return None
-
-
-"""""
-更新table中經緯度資料,start、end控制更新範圍
-"""""
-
-
-def update_xy_data(model_name, start=None, end=None):
-    bulk_update_data = []
-    obj_list = model_name.objects.all()[start:end]
-    for obj_check in obj_list:
-        location = obj_check.address
-        print(location, obj_check.id)
-        df = GetNTLSxy.main_process(location)
-        if df is None:
-            print('pass')
-            continue
-        obj_check.city = df['縣市'].values[0]
-        obj_check.district = df['鄉鎮'].values[0]
-        obj_check.latitude = df['X'].values[0]
-        obj_check.longitude = df['Y'].values[0]
-
-        bulk_update_data.append(obj_check)
-    update_fields_area = ['city', 'district', 'latitude', 'longitude']
-    model_name.objects.bulk_update(bulk_update_data, update_fields_area, batch_size=1000)

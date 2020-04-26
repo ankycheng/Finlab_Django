@@ -3,8 +3,8 @@ from io import StringIO
 import requests
 import datetime
 from crawlers.finlab.data_process_tools import year_transfer, last_month
-from crawlers.finlab.import_tools import update_xy_data
-from crawlers.models import CompanyBasicInfoTW, BrokerInfoTW
+from crawlers.finlab.import_tools import add_to_sql
+from crawlers.models import CompanyBasicInfoTW, BrokerInfoTW, BrokerTradeTW
 from django.core.exceptions import ObjectDoesNotExist
 
 """""
@@ -281,7 +281,7 @@ class CrawlCompanyBasicInfoTW:
 
     @staticmethod
     def update_xy():
-        update_xy_data(CompanyBasicInfoTW)
+        GetNTLSxy.update_xy_data(CompanyBasicInfoTW)
 
 
 """""
@@ -501,7 +501,7 @@ class CrawlBrokerInfoTW:
 
     @staticmethod
     def update_xy():
-        update_xy_data(BrokerInfoTW)
+        GetNTLSxy.update_xy_data(BrokerInfoTW)
 
 
 """""
@@ -557,3 +557,88 @@ class GetNTLSxy:
             return df
         else:
             return df
+
+    # 更新table中經緯度資料,start、end控制更新範圍
+    @classmethod
+    def update_xy_data(cls, model_name, start=None, end=None):
+        bulk_update_data = []
+        obj_list = model_name.objects.all()[start:end]
+        for obj_check in obj_list:
+            location = obj_check.address
+            print(location, obj_check.id)
+            df = cls.GetNTLSxy.main_process(location)
+            if df is None:
+                print('pass')
+                continue
+            obj_check.city = df['縣市'].values[0]
+            obj_check.district = df['鄉鎮'].values[0]
+            obj_check.latitude = df['X'].values[0]
+            obj_check.longitude = df['Y'].values[0]
+
+            bulk_update_data.append(obj_check)
+        update_fields_area = ['city', 'district', 'latitude', 'longitude']
+        model_name.objects.bulk_update(bulk_update_data, update_fields_area, batch_size=1000)
+
+
+"""""
+上市櫃分點券商進出(前15大),巢狀爬蟲
+"""""
+
+
+class CrawlBrokerTradeTW:
+
+    def __init__(self, date):
+        self.date = date
+        self.start_date_str = date.strftime("%Y-%m-%d")
+        self.target_name = "台股分點進出資訊"
+        self.format = "nest_time_series"
+
+    def check_trade_day(self):
+        stock_range = CrawlStockPriceTW(self.date)
+        try:
+            df = pd.concat([stock_range.crawl_sii(), stock_range.crawl_otc()])['stock_id'].values
+            return df
+        except ValueError:
+            return None
+
+    def broker_trade(self, stock_id):
+        print(stock_id)
+        url = 'https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco.djhtm?a=' + stock_id + '&e=' + self.start_date_str + \
+              '&f=' + self.start_date_str
+        r = requests.post(url)
+        html_df = pd.read_html(StringIO(r.text))
+        df = pd.DataFrame(html_df[2])
+        # holiday
+        if len(df) < 9:
+            return None
+        df.columns = df.iloc[5]
+        df = df.iloc[6:-3]
+        buy_side = df.iloc[:, :5]
+        buy_side = buy_side.rename(columns={'買超券商': 'broker_name', '買進': 'buy_num',
+                                            '賣出': 'sell_num', '買超': 'net_bs',
+                                            '佔成交比重': 'transactions_pt'})
+        sell_side = df.iloc[:, 5:]
+        sell_side = sell_side.rename(columns={'賣超券商': 'broker_name', '買進': 'buy_num',
+                                              '賣出': 'sell_num', '賣超': 'net_bs',
+                                              '佔成交比重': 'transactions_pt'})
+
+        df_all = pd.concat([buy_side, sell_side], sort=False).dropna()
+        df_all.iloc[:, 1:] = df_all.iloc[:, 1:].apply(lambda s: pd.to_numeric(s.str.replace('%', ''), errors="coerce"))
+        df_all['net_bs'] = df_all['buy_num'] - df_all['sell_num']
+        df_all["date"] = pd.to_datetime(self.date)
+        df_all['broker_name'] = df_all['broker_name'].apply(lambda s: s.replace('證券', '')).apply(
+            lambda s: s.replace('(牛牛牛)', '犇'))
+        # 某些券商被整併，列入總行
+        df_all['broker_name'] = df_all['broker_name'].apply(lambda s: s if '停' not in s else s[:s.index('-')])
+        df_all['stock_id'] = df_all['broker_name'].apply(lambda s: stock_id + '-' + s)
+        add_to_sql(BrokerTradeTW, df_all, 'broker_name')
+
+        return df_all
+
+    def crawl_main(self):
+        crawl_list = self.check_trade_day()
+        if crawl_list is not None:
+            for stock_id in crawl_list[:5]:
+                self.broker_trade(stock_id)
+        else:
+            return False
