@@ -3,6 +3,9 @@ from io import StringIO
 import requests
 import datetime
 from crawlers.finlab.data_process_tools import year_transfer, last_month
+from crawlers.finlab.import_tools import update_xy_data
+from crawlers.models import CompanyBasicInfoTW, BrokerInfoTW
+from django.core.exceptions import ObjectDoesNotExist
 
 """""
 爬蟲-台股上市櫃股價
@@ -276,6 +279,10 @@ class CrawlCompanyBasicInfoTW:
         df3 = df3.fillna('')
         return df3
 
+    @staticmethod
+    def update_xy():
+        update_xy_data(CompanyBasicInfoTW)
+
 
 """""
 爬蟲-台股上市櫃各類股指數值
@@ -288,6 +295,7 @@ class CrawlStockIndexPriceTW:
         self.date_str = date.strftime("%Y%m%d")
         self.target_name = "台股指數資訊"
         self.sub_market = ["sii", "otc"]
+        self.format = "time_series"
 
     def sii_index(self):
 
@@ -371,6 +379,7 @@ class CrawlStockIndexVolTW:
         self.date_str = date.strftime("%Y%m%d")
         self.target_name = "台股指數成交量資訊"
         self.sub_market = ["sii", "otc"]
+        self.format = "time_series"
 
     def sii_vol(self):
 
@@ -451,3 +460,100 @@ class CrawlStockIndexVolTW:
         except ValueError:
             return None
         return df
+
+
+class CrawlBrokerInfoTW:
+    def __init__(self):
+        self.target_name = "台股券商資訊"
+        self.format = "non_time_series"
+
+    @staticmethod
+    def headquarter_info():
+        r = requests.get('https://www.twse.com.tw/zh/brokerService/brokerServiceAudit')
+        html_df = pd.read_html(StringIO(r.text))
+        df = pd.DataFrame(html_df[0])
+        df['department'] = '總公司'
+        df = df.drop(columns='分公司')
+        return df
+
+    @staticmethod
+    def branch_info(broker_hq_id):
+        url = 'https://www.twse.com.tw/brokerService/brokerServiceAudit?showType=list&stkNo=' + broker_hq_id + \
+              '&focus=6'
+        r = requests.get(url)
+        html_df = pd.read_html(StringIO(r.text))
+        df = pd.DataFrame(html_df[3])
+        return df
+
+    def crawl_main(self):
+        broker_hq = self.headquarter_info()
+        branch_data = pd.concat([self.branch_info(i) for i in broker_hq['證券商代號'].values])
+        branch_data['department'] = '分公司'
+        df_all = pd.concat([broker_hq, branch_data])
+        df_all = df_all.rename(columns={'證券商代號': 'stock_id', '證券商名稱': 'broker_name',
+                                        '開業日': 'date_of_establishment', '地址': 'address',
+                                        '電話': 'phone'
+                                        })
+        df_all = df_all[df_all['stock_id'] != '查無資料']
+        df_all['date_of_establishment'] = df_all['date_of_establishment'].apply(lambda t: year_transfer(t))
+        df_all['broker_name'] = df_all['broker_name'].apply(lambda s: s.replace(' ', '').replace('證券', ''))
+        return df_all
+
+    @staticmethod
+    def update_xy():
+        update_xy_data(BrokerInfoTW)
+
+
+"""""
+國土資訊系統,輸入地址取得經緯度
+"""""
+
+
+class GetNTLSxy:
+
+    @classmethod
+    def get_xy(cls, address):
+        for i in ['新竹科學工業園區', '新竹科學園區', '大發工業區',
+                  '南部科學工業園區', '平鎮工業區', '高雄加工出口區'
+                                       '南崗工業區']:
+            address = address.replace(i, '')
+
+        # 解決郵遞區號問題
+        filter_num = filter(str.isalpha, address[:6])
+        address = ''.join(list(filter_num)) + address[6:]
+
+        url = 'https://moisagis.moi.gov.tw/moiap/gis2010/content/user/matchservice/singleMatch.cfm'
+        form = {
+            'address': address,
+            'matchRange': '0',
+            'fuzzyNum': '0',
+            'roadEQstreet': 'false',
+            'subnumEQnum': 'false',
+            'isLockTown': 'false',
+            'isLockVillage': 'false',
+            'ex_coor': 'EPSG:4326',
+            'U02DataYear': '2015',
+            'output_xml': '1'
+        }
+        try:
+            r = requests.post(url, data=form)
+            html_df = pd.read_html(StringIO(r.text))
+        except ValueError:
+            return None
+        df = pd.DataFrame(html_df[0])
+        df = df.where(pd.notnull(df), None)
+        return df
+
+    # 地址有些漏區的
+    @classmethod
+    def main_process(cls, address):
+        df = cls.get_xy(address)
+        if df is None:
+            return None
+        elif df['X'].values[0] is None:
+            # 隨便加一個區，會自動產生正確區
+            address = address[:3] + '信義區' + address[3:]
+            df = cls.get_xy(address)
+            return df
+        else:
+            return df

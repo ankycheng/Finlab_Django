@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'import_export',
     'django_extensions',
     'crawlers',
+    'financial_officer'
 ]
 
 MIDDLEWARE = [

@@ -4,16 +4,15 @@ import os
 import pandas as pd
 import json5
 from dateutil.rrule import rrule, DAILY, MONTHLY
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.conf import settings
 from sqlalchemy import create_engine
+from crawlers.finlab.pioneers import GetNTLSxy
+from django.db import models
 
 """""
 資料庫設定
 """""
-BASE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'stock_fleets')
-with open(os.path.join(BASE_DIR, "config.json"), 'r', encoding='utf8') as file:
-    CONFIG_DATA = json5.load(file)
 # 資料庫連線
 dbName = (
     settings.CONFIG_DATA.get("DBNAME")
@@ -126,18 +125,44 @@ def in_date_list(conn, model_name, check_date):
 
 
 """""
+ForeignKey匯入DB
+"""""
+
+
+def fk_import(model_name, df, *fk_columns):
+    fk_field_names = [field.name for field in model_name._meta.fields
+                      if isinstance(field, models.ForeignKey)]
+    fk_remote = [model_name._meta.get_field(i).remote_field.model for i in fk_field_names]
+    fk_obj = [m.objects.filter(**{n: df[n]}).first() for m, n in zip(fk_remote, *fk_columns)]
+    fk_create_data = dict((m, n) for m, n in zip(fk_field_names, fk_obj))
+    return fk_create_data
+
+
+def fk_update(model_name, df, *fk_columns):
+    fk_field_names = [field.name for field in model_name._meta.fields
+                      if isinstance(field, models.ForeignKey)]
+    fk_remote = [model_name._meta.get_field(i).remote_field.model for i in fk_field_names]
+    fk_obj = [m.objects.filter(**{n: df[n]}).first() for m, n in zip(fk_remote, *fk_columns)]
+    return zip(fk_field_names, fk_obj)
+
+
+"""""
 Dataframe匯入DB,適用時間序列資料
 """""
 
 
-def add_to_sql(model_name, df):
+def add_to_sql(model_name, df, *fk_columns):
     df = df.where(pd.notnull(df), None)
+    columns_list = list(df.columns.values)
+    # delete fk_columns , db only save fk_id
+    for i in fk_columns:
+        columns_list.remove(i)
     bulk_update_data = []
     bulk_create_data = []
-    columns_list = model_name._meta.fields[1:]
+    # columns_list = model_name._meta.fields[1:]
 
     # if data_date isn't in table,process bulk_create
-    if 'date' in [field.name for field in columns_list]:
+    if 'date' in columns_list:
         data_date = df['date'].iloc[0].strftime('%Y-%m-%d')
         check_date = in_date_list(engine, model_name, data_date)
     else:
@@ -148,7 +173,12 @@ def add_to_sql(model_name, df):
         for index, item in df.iterrows():
             # Use bulk_update to update obj,PS:must include prime_key column
             try:
-                obj_create_data = dict((field.name, item[field.name]) for field in columns_list)
+                obj_create_data = dict((field, item[field]) for field in columns_list)
+
+                # 處理ForeignKey
+                if len(fk_columns) > 0:
+                    obj_create_data.update(fk_import(model_name, item, fk_columns))
+
                 obj_create = model_name(**obj_create_data)
                 bulk_create_data.append(obj_create)
                 print(f"create{' '}{' '}Stock_id:{item['stock_id']}")
@@ -163,24 +193,37 @@ def add_to_sql(model_name, df):
 
             # Use bulk_update to update obj,PS:must include primekey column
             try:
-                if 'date' in [field.name for field in columns_list]:
-                    obj_check = model_name.objects.get(stock_id=item['stock_id'], date=item['date'])
-                else:
-                    obj_check = model_name.objects.get(stock_id=item['stock_id'])
+                try:
+                    if 'date' in columns_list:
+                        obj_check = model_name.objects.get(stock_id=item['stock_id'], date=item['date'])
+                    else:
+                        obj_check = model_name.objects.get(stock_id=item['stock_id'])
+                # 無法區分字母大小寫
+                except MultipleObjectsReturned:
+                    if 'date' in columns_list:
+                        obj_check = model_name.objects.get(stock_id__contains=item['stock_id'], date=item['date'])
+                    else:
+                        obj_check = model_name.objects.get(stock_id__contains=item['stock_id'])
 
-                attribute_data = [field.name for field in columns_list]
-                update_data = [item[field.name] for field in columns_list]
+                attribute_data = columns_list
+                update_data = [item[field] for field in columns_list]
 
                 for attribute, update_value in zip(attribute_data, update_data):
                     setattr(obj_check, attribute, update_value)
-
+                # 處理ForeignKey
+                if len(fk_columns) > 0:
+                    for attribute, update_value in fk_update(model_name, item, fk_columns):
+                        setattr(obj_check, attribute, update_value)
                 bulk_update_data.append(obj_check)
                 print(f"update{' '}{' '}Stock_id:{item['stock_id']}")
 
             # Use dict to bulk_create obj when get nothing ,process incomplete data
             except ObjectDoesNotExist:
-                obj_create_data = dict((field.name, item[field.name]) for field in columns_list)
+                obj_create_data = dict((field, item[field]) for field in columns_list)
                 obj_create = model_name(**obj_create_data)
+                # 處理ForeignKey
+                if len(fk_columns) > 0:
+                    obj_create_data.update(fk_import(model_name, item, fk_columns))
                 bulk_create_data.append(obj_create)
                 print(f"create{' '}{' '}Stock_id:{item['stock_id']}")
 
@@ -190,10 +233,10 @@ def add_to_sql(model_name, df):
 
     # Process bulk
     model_name.objects.bulk_create(bulk_create_data, batch_size=1000)
-    if 'date' in [field.name for field in columns_list]:
+    if 'date' in columns_list:
         print_date = df['date'].values[0]
     else:
-        print_date = df['update_time'].values[0]
+        print_date = datetime.datetime.now()
     print(f"Finish{' '}{model_name}{'date'}{':'}{print_date}{' '}{'bulk_create'}{':'}{len(bulk_create_data)}")
     update_fields_area = [field.name for field in model_name._meta.fields if field.name != 'id']
     model_name.objects.bulk_update(bulk_update_data, update_fields_area, batch_size=1000)
@@ -217,13 +260,13 @@ class CrawlerProcess:
     def __repr__(self):
         return str(self.model_name._meta.db_table) + ' ' + "table_latest_date:" + str(self.table_latest_date)
 
-    def crawl_process(self, date_list: list):
+    def crawl_process(self, date_list: list, *fk_columns):
 
         for d in date_list:
             df = getattr(self.crawl_class(d), self.crawl_method)()
             try:
                 ret = df.drop_duplicates(['stock_id', 'date'], keep='last')
-                add_to_sql(self.model_name, ret)
+                add_to_sql(self.model_name, ret, *fk_columns)
                 print(f'Finish {d} Data')
 
             # holiday is blank
@@ -232,7 +275,7 @@ class CrawlerProcess:
             time.sleep(10)
 
     # 指定區間，主要為初始化table和測試用
-    def specified_date_crawl(self, start_date: str, end_date: str):
+    def specified_date_crawl(self, start_date: str, end_date: str, *fk_columns):
 
         start_date = datetime.datetime.strptime(start_date, "%Y-%m-%d")
         end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d")
@@ -249,7 +292,7 @@ class CrawlerProcess:
                     print(f"Finish Update Work")
                     return None
 
-                self.crawl_process(date_list)
+                self.crawl_process(date_list, *fk_columns)
             else:
                 print(f"The start_date > your end_date,please modify your start_date <={end_date} .")
 
@@ -277,7 +320,7 @@ class CrawlerProcess:
             return -1
 
     # 自動爬取結尾後日期的資料
-    def auto_update_crawl(self, last_day='Now'):
+    def auto_update_crawl(self, last_day='Now', *fk_columns):
 
         try:
             if last_day == 'Now':
@@ -299,7 +342,7 @@ class CrawlerProcess:
                     date_list = month_range(start_date, end_date)
                 else:
                     date_list = season_range(start_date, end_date)
-                self.crawl_process(date_list)
+                self.crawl_process(date_list, *fk_columns)
 
             elif self.working_process() == 1:
                 print(f"Finish Update Work")
@@ -314,3 +357,28 @@ class CrawlerProcess:
         except ValueError:
             print('Error:last_day form is %Y-%m-%d,please modify. ')
             return None
+
+
+"""""
+更新table中經緯度資料,start、end控制更新範圍
+"""""
+
+
+def update_xy_data(model_name, start=None, end=None):
+    bulk_update_data = []
+    obj_list = model_name.objects.all()[start:end]
+    for obj_check in obj_list:
+        location = obj_check.address
+        print(location, obj_check.id)
+        df = GetNTLSxy.main_process(location)
+        if df is None:
+            print('pass')
+            continue
+        obj_check.city = df['縣市'].values[0]
+        obj_check.district = df['鄉鎮'].values[0]
+        obj_check.latitude = df['X'].values[0]
+        obj_check.longitude = df['Y'].values[0]
+
+        bulk_update_data.append(obj_check)
+    update_fields_area = ['city', 'district', 'latitude', 'longitude']
+    model_name.objects.bulk_update(bulk_update_data, update_fields_area, batch_size=1000)

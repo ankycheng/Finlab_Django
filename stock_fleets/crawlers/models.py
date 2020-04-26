@@ -59,6 +59,10 @@ class CompanyBasicInfoTW(models.Model):
     investor_relations_email = models.CharField(blank=True, null=True, max_length=500,
                                                 verbose_name="投資人關係聯絡電子郵件")
     english_abbreviation = models.CharField(blank=True, null=True, max_length=500, verbose_name="英文簡稱")
+    longitude = models.FloatField(blank=True, null=True, default=None, verbose_name="經度")
+    latitude = models.FloatField(blank=True, null=True, default=None, verbose_name="緯度")
+    city = models.CharField(blank=True, null=True, default=None, max_length=100, verbose_name="縣市")
+    district = models.CharField(blank=True, null=True, default=None, max_length=100, verbose_name="鄉鎮區")
 
     def __str__(self):
         return self.stock_id + ' ' + str(self.short_name)
@@ -94,3 +98,28 @@ class StockIndexVolTW(models.Model):
     turnover_vol = models.FloatField(blank=True, null=True, verbose_name="成交股數")
     turnover_price = models.FloatField(blank=True, null=True, verbose_name="成交金額")
     turnover_num = models.BigIntegerField(blank=True, null=True, verbose_name="成交筆數")
+
+
+class BrokerInfoTW(models.Model):
+    stock_id = models.CharField(max_length=100, verbose_name="券商代號")
+    broker_name = models.CharField(max_length=100, verbose_name="券商名稱")
+    date_of_establishment = models.CharField(max_length=100, verbose_name="券商建立日")
+    address = models.CharField(max_length=100, verbose_name="券商地址")
+    phone = models.CharField(max_length=100, verbose_name="市話")
+    department = models.CharField(max_length=100, verbose_name="券商部門")
+    longitude = models.FloatField(blank=True, null=True, verbose_name="經度")
+    latitude = models.FloatField(blank=True, null=True, verbose_name="緯度")
+    city = models.CharField(blank=True, null=True, default=None, max_length=100, verbose_name="縣市")
+    district = models.CharField(blank=True, null=True, default=None, max_length=100, verbose_name="鄉鎮區")
+
+
+class BrokerTradeTW(models.Model):
+    stock_id = models.CharField(max_length=100, verbose_name="分點進出代號")
+    date = models.DateTimeField(verbose_name="資料日期")
+    buy_num = models.FloatField(blank=True, null=True, verbose_name="買進")
+    sell_num = models.FloatField(blank=True, null=True, verbose_name="賣出")
+    net_bs = models.FloatField(blank=True, null=True, verbose_name="買賣超")
+    transactions_pt = models.FloatField(blank=True, null=True, verbose_name="成交占比")
+    broker_info = models.ForeignKey("BrokerInfoTW", blank=True, null=True, on_delete=models.SET_NULL,
+                                    db_constraint=False, verbose_name="券商資訊")
+

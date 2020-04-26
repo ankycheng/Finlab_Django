@@ -5,6 +5,7 @@ from .base import *
 
 with open(os.path.join(BASE_DIR, "config.json"), 'r', encoding='utf8') as file:
     CONFIG_DATA = json5.load(file)
+    CONFIG_DATA["PRODUCTION"] = True
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
