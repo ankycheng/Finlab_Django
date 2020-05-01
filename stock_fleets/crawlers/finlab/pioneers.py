@@ -16,10 +16,8 @@ class CrawlStockPriceTW:
         self.sub_market = ["sii", "otc", "rotc"]
 
     def crawl_sii(self):
-
         r = requests.post(
             "http://www.twse.com.tw/exchangeReport/MI_INDEX?response=csv&date=" + self.date_str + "&type=ALLBUT0999")
-
         content = r.text.replace("=", "")
         lines = content.split("\n")
         lines = list(filter(lambda l: len(l.split('",')) > 10, lines))
@@ -38,7 +36,6 @@ class CrawlStockPriceTW:
                                 "最高價": "high_price", "最低價": "low_price"})
         df['market'] = '上市'
         df = df.where(pd.notnull(df), None)
-
         return df
 
     @staticmethod
@@ -59,14 +56,12 @@ class CrawlStockPriceTW:
             return True
 
     def crawl_otc(self):
-
         y = str(int(self.date.strftime("%Y")) - 1911)
         date_str = y + "/" + self.date.strftime("%m") + "/" + self.date.strftime("%d")
 
         link = "http://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_download.php?l=zh-tw&d=" \
                + date_str + "&s=0,asc,0"
         r = requests.get(link)
-
         lines = r.text.replace("\r", "").split("\n")
         try:
             df = pd.read_csv(StringIO("\n".join(lines[3:])), header=None)
@@ -87,14 +82,11 @@ class CrawlStockPriceTW:
         df = df[df["turnover_vol"] >= 0]
         df['market'] = '上櫃'
         df = df.where(pd.notnull(df), None)
-
         return df
 
     def crawl_rotc(self):
-
         link = "http://www.tpex.org.tw/web/emergingstock/historical/daily/EMDaily_dl.php?l=zh-tw&f=EMdes010." + \
                self.date_str + "-C.csv"
-
         r = requests.get(link)
         lines = r.text.replace("\r", "").split("\n")
         try:
@@ -113,7 +105,6 @@ class CrawlStockPriceTW:
         df["date"] = pd.to_datetime(self.date)
         if "證券名稱" in df.columns:
             df = df.loc[:, ["證券代號", "date", "證券名稱", "成交量", "成交金額", "前日均價", "最後", "最高", "最低"]]
-
         # old format("名稱")
         else:
             df = df.loc[:, ["證券代號", "date", "名稱", "成交量", "成交金額", "前日均價", "最後", "最高", "最低"]]
@@ -123,7 +114,6 @@ class CrawlStockPriceTW:
                                 "成交量": "turnover_vol", "成交金額": "turnover_price",
                                 "前日均價": "open_price", "最後": "close_price",
                                 "最高": "high_price", "最低": "low_price"})
-
         # solve " "
         df['stock_id'] = df['stock_id'].apply(lambda s: s[:s.index(' ')] if '" "' in s else s)
         df['stock_name'] = df['stock_name'].apply(lambda s: s[:s.index(' ')] if '" "' in s else s)
@@ -151,15 +141,12 @@ class CrawlMonthlyRevnueTW:
         url_date = last_month(self.date)
         data = []
         for i in self.sub_market:
-
             url = 'https://mops.twse.com.tw/nas/t21/' + i + '/t21sc03_' + str(url_date.year - 1911) + '_' + str(
                 url_date.month) + '.html'
-
             # 偽瀏覽器
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko)'
                               ' Chrome/39.0.2171.95 Safari/537.36'}
-
             # 下載該年月的網站，並用pandas轉換成 dataframe
             try:
                 r = requests.get(url, headers=headers)
@@ -181,12 +168,9 @@ class CrawlMonthlyRevnueTW:
                 df['當月營收'] = pd.to_numeric(df['當月營收'], 'coerce')
                 df = df[~df['當月營收'].isnull()]
                 df = df[df['公司代號'] != '合計']
-
                 df['date'] = datetime.date(self.date.year, self.date.month, 10)
-
                 df = df.rename(columns={'公司代號': 'stock_id'})
                 df = df.set_index(['stock_id', 'date'])
-
                 data.append(df)
             except Exception as e:
                 print(e)
@@ -205,7 +189,6 @@ class CrawlMonthlyRevnueTW:
                                 '前期比較增減(%)': "cp_cm_rev", "備註": "note",
                                 })
         df = df.reset_index()
-
         return df
 
 
@@ -225,14 +208,12 @@ class CrawlCompanyBasicInfoTW:
                 "firstin": "1",
                 "TYPEK": market
             }
-
             res = requests.post(url, data=form_data)
             res.encoding = "utf-8"
             df = pd.read_html(res.text)
             df = pd.DataFrame(df[0])
             df['market'] = '上市' if market == 'sii' else '上櫃' if market == 'otc' else '興櫃'
             data.append(df)
-
         df2 = pd.concat(data, sort=False)
         df2 = df2.astype(str)
         df2 = df2.apply(lambda s: s.str.replace(",", ""))
@@ -241,7 +222,6 @@ class CrawlCompanyBasicInfoTW:
                           "成立日期", "上市日期", "上櫃日期", "興櫃日期", "實收資本額(元)", "已發行普通股數或TDR原發行股數",
                           "私募普通股(股)", "特別股(股)", "普通股盈餘分派或虧損撥補頻率", "股票過戶機構", "簽證會計師事務所",
                           "公司網址", "投資人關係聯絡電話", "投資人關係聯絡電子郵件", "英文簡稱", "market"]]
-
         df3 = df3.rename(columns={
             "公司代號": "stock_id", "公司名稱": "name",
             "公司簡稱": "short_name", "產業類別": "category",
@@ -256,20 +236,15 @@ class CrawlCompanyBasicInfoTW:
             "簽證會計師事務所": "visa_accounting_firm", "公司網址": "website",
             "投資人關係聯絡電話": "investor_relations_contact", "投資人關係聯絡電子郵件": "investor_relations_email",
             "英文簡稱": "english_abbreviation", "實收資本額(元)": "capital"
-
         })
         # Data format Process
         df3 = df3[df3["stock_id"] != "公司代號"]
         df3["registered_country"] = df3["registered_country"].apply(lambda s: s.replace("－", "台灣"))
-
         for share_column in ["capital", "shares_issued", "private_shares", "special_shares"]:
             df3[share_column] = df3[share_column].apply(lambda s: pd.to_numeric(s, errors="coerce"))
-
         for date_column in ["establishment_date", "sii_date", "otc_date", "rotc_date"]:
             df3[date_column] = df3[date_column].apply(lambda t: year_transfer(t))
-
         df3["update_time"] = datetime.datetime.now()
-
         df3 = df3.fillna('')
         return df3
 
@@ -287,10 +262,8 @@ class CrawlStockIndexPriceTW:
         self.format = "time_series"
 
     def sii_index(self):
-
         r = requests.post(
             'http://www.twse.com.tw/exchangeReport/MI_INDEX?response=csv&date=' + self.date_str + '&type=IND')
-
         content = r.text.replace('=', '')
         lines = content.split('\n')
         lines = list(filter(lambda l: len(l.split('",')) > 5, lines))
@@ -309,7 +282,6 @@ class CrawlStockIndexPriceTW:
 
         df_all = df.loc[:, ['stock_id', 'date', 'index_price', 'quote_change']]
         df_all = df_all.dropna()
-
         return df_all
 
     def otc_index(self):
@@ -319,7 +291,6 @@ class CrawlStockIndexPriceTW:
         link = 'http://www.tpex.org.tw/web/stock/aftertrading/index_summary/summary_download.php?l=zh-tw&d=' + \
                date_str + '&s=0,asc,0'
         r = requests.get(link)
-
         lines = r.text.replace("\r", "").split("\n")
         try:
             df = pd.read_csv(StringIO("\n".join(lines[3:])), header=None)
@@ -327,18 +298,14 @@ class CrawlStockIndexPriceTW:
             return None
         df.columns = list(map(lambda s: s.replace(" ", ""), lines[2].split(",")))
         df = df.apply(lambda s: s.str.replace(",", ""))
-
         df['stock_id'] = '上櫃' + (df['指數'].apply(lambda s: s.replace('指數', ''))) + '指數'
-
         # 第二個櫃買指數以下的才是報酬指數，找出第二個，各年指數項目不同使用find來定位
         rem_loc = df['指數'].str.find('櫃買指數')
         rem_loc = (rem_loc[rem_loc > -1].index.tolist())[-1]
-
         # 一般指數
         df_normal = df.iloc[:rem_loc]
         # 報酬指數
         df_rem = df.iloc[rem_loc:]
-
         # 合併
         df_all = pd.concat([df_normal, df_rem])
         df_all = df_all.rename(columns={'收市指數': 'index_price', '漲跌幅度': 'quote_change'})
@@ -366,21 +333,16 @@ class CrawlStockIndexVolTW:
         self.format = "time_series"
 
     def sii_vol(self):
-
         r = requests.post('http://www.twse.com.tw/exchangeReport/BFIAMU?response=csv&date=' + self.date_str)
-
         content = r.text.replace('=', '')
-
         lines = content.split('\n')
         lines = list(filter(lambda l: len(l.split('",')) > 4, lines))
-
         content = "\n".join(lines)
         if content == '':
             return None
         df = pd.read_csv(StringIO(content))
         df = df.astype(str)
         df = df.apply(lambda s: s.str.replace(',', ''))
-
         df = df.rename(
             columns={'分類指數名稱': 'stock_id', '成交股數': 'turnover_vol', '成交金額': 'turnover_price', '成交筆數': 'turnover_num'})
         df['date'] = pd.to_datetime(self.date)
@@ -395,11 +357,9 @@ class CrawlStockIndexVolTW:
         r = requests.post(
             'http://www.twse.com.tw/exchangeReport/MI_INDEX?response=csv&date=' + self.date_str + '&type=MS')
         content = r.text.replace('=', '')
-
         lines = content.split('\n')
         lines = list(filter(lambda l: len(l.split('",')) < 6, lines))
         lines = lines[1:]
-
         content = "\n".join(lines)
         if content == '':
             return None
@@ -489,19 +449,16 @@ class CrawlBrokerInfoTW:
 
 
 class GetNTLSxy:
-
     @classmethod
     def get_xy(cls, address):
         for i in ['新竹科學工業園區', '新竹科學園區', '大發工業區',
                   '南部科學工業園區', '平鎮工業區', '高雄加工出口區'
                                        '南崗工業區']:
             address = address.replace(i, '')
-
         address = char_filter(address, '及', '部分', '、', ',', '（')
         # 解決郵遞區號問題
         filter_num = filter(str.isalpha, address[:6])
         address = ''.join(list(filter_num)) + address[6:]
-
         url = 'https://moisagis.moi.gov.tw/moiap/gis2010/content/user/matchservice/singleMatch.cfm'
         form = {
             'address': address,
@@ -562,7 +519,6 @@ class GetNTLSxy:
 
 
 class CrawlBrokerTradeTW:
-
     def __init__(self, start_date):
         self.start_date = start_date
         self.start_date_str = start_date.strftime("%Y-%m-%d")
@@ -596,12 +552,10 @@ class CrawlBrokerTradeTW:
         buy_side = buy_side.rename(columns={'買超券商': 'broker_name', '買進': 'buy_num',
                                             '賣出': 'sell_num', '買超': 'net_bs',
                                             '佔成交比重': 'transactions_pt'})
-
         sell_side = df.iloc[:, 5:]
         sell_side = sell_side.rename(columns={'賣超券商': 'broker_name', '買進': 'buy_num',
                                               '賣出': 'sell_num', '賣超': 'net_bs',
                                               '佔成交比重': 'transactions_pt'})
-
         df_all = pd.concat([buy_side, sell_side], sort=False).dropna()
         df_all.iloc[:, 1:] = df_all.iloc[:, 1:].apply(lambda s: pd.to_numeric(s.str.replace('%', ''), errors="coerce"))
         df_all['net_bs'] = df_all['buy_num'] - df_all['sell_num']
@@ -612,7 +566,6 @@ class CrawlBrokerTradeTW:
         df_all['broker_name'] = df_all['broker_name'].apply(lambda s: s if '停' not in s else s[:s.index('-')])
         df_all['stock_id'] = df_all['broker_name'].apply(lambda s: stock_id + '-' + s)
         AddToSQL.add_to_sql(BrokerTradeTW, df_all, 'broker_name')
-
         return df_all
 
     def crawl_main(self):
@@ -700,7 +653,6 @@ class CrawlStockTiiTW:
                                 '外資(股數)': 'ft_net', '投信(股數)': 'itc_net',
                                 '自營商(股數)': 'dealer_net', '合計買賣超(股數)': 'tii_net',
                                 })
-
         df["date"] = pd.to_datetime(self.date)
         df['stock_id'] = df['stock_id'].apply(lambda s: s[:s.index(' ')] if '" "' in s else s)
         df['stock_name'] = df['stock_name'].apply(lambda s: s[:s.index(' ')] if '" "' in s else s)
@@ -745,7 +697,6 @@ class CrawlStockTiiMarketReportTW:
         return df
 
     def crawl_otc(self):
-
         y = str(int(self.date.strftime("%Y")) - 1911)
         date_str = y + "/" + self.date.strftime("%m") + "/" + self.date.strftime("%d")
         r = requests.get(
@@ -768,7 +719,6 @@ class CrawlStockTiiMarketReportTW:
                               '投信': '上櫃投信', '自營商合計': '上櫃自營商合計'
                               })
         df = df.reset_index()
-
         return df
 
     def crawl_main(self):
@@ -789,7 +739,6 @@ class CrawlStockTdccTW:
         if file is False:
             headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_1\
             0_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
-
             res = requests.get("https://smart.tdcc.com.tw/opendata/getOD.ashx?id=1-5", headers=headers)
             df = pd.read_csv(StringIO(res.text))
         else:

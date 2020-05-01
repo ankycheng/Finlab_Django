@@ -160,6 +160,14 @@ class AddToSQL:
         bulk_update_data = []
         bulk_create_data = []
 
+        def bulk_create_func(bc_model_name, bc_columns_list):
+            obj_create_data = dict((field, item[field]) for field in bc_columns_list)
+            # 處理ForeignKey
+            if len(fk_columns) > 0:
+                obj_create_data.update(cls.fk_create())
+            obj_create = bc_model_name(**obj_create_data)
+            bulk_create_data.append(obj_create)
+
         # if data_date isn't in table,process bulk_create
         if 'date' in columns_list:
             data_date = df['date'].iloc[0].strftime('%Y-%m-%d')
@@ -172,23 +180,13 @@ class AddToSQL:
             for index, item in df.iterrows():
                 # Use bulk_update to update obj,PS:must include prime_key column
                 try:
-                    obj_create_data = dict((field, item[field]) for field in columns_list)
-
-                    # 處理ForeignKey
-                    if len(fk_columns) > 0:
-                        obj_create_data.update(cls.fk_create())
-
-                    obj_create = model_name(**obj_create_data)
-                    bulk_create_data.append(obj_create)
-
+                    bulk_create_func(model_name, columns_list)
                 except Exception as e:
                     print(f"error{' '}{e}{' '}Stock_id:{item['stock_id']}")
                     pass
-
         else:
             # Change CSV to iterrow
             for index, item in df.iterrows():
-
                 # Use bulk_update to update obj,PS:must include primekey column
                 try:
                     try:
@@ -202,10 +200,8 @@ class AddToSQL:
                             obj_check = model_name.objects.get(stock_id__contains=item['stock_id'], date=item['date'])
                         else:
                             obj_check = model_name.objects.get(stock_id__contains=item['stock_id'])
-
                     attribute_data = columns_list
                     update_data = [item[field] for field in columns_list]
-
                     for attribute, update_value in zip(attribute_data, update_data):
                         setattr(obj_check, attribute, update_value)
                     # 處理ForeignKey
@@ -213,20 +209,12 @@ class AddToSQL:
                         for attribute, update_value in cls.fk_update():
                             setattr(obj_check, attribute, update_value)
                     bulk_update_data.append(obj_check)
-
                 # Use dict to bulk_create obj when get nothing ,process incomplete data
                 except ObjectDoesNotExist:
-                    obj_create_data = dict((field, item[field]) for field in columns_list)
-                    # 處理ForeignKey
-                    if len(fk_columns) > 0:
-                        obj_create_data.update(cls.fk_create())
-                    obj_create = model_name(**obj_create_data)
-                    bulk_create_data.append(obj_create)
-
+                    bulk_create_func(model_name, columns_list)
                 except Exception as e:
                     print(f"error{' '}{e}{' '}Stock_id:{item['stock_id']}")
                     pass
-
         # Process bulk
         model_name.objects.bulk_create(bulk_create_data, batch_size=1000)
         if 'date' in columns_list:
@@ -250,7 +238,6 @@ fk_columns-外鍵對應過濾用欄位名
 
 
 class CrawlerProcess:
-
     def __init__(self, crawl_class, crawl_method, model_name, range_date, nest=False, time_sleep=8, *fk_columns):
         self.crawl_class = crawl_class
         self.crawl_method = crawl_method
@@ -265,7 +252,6 @@ class CrawlerProcess:
         return str(self.model_name._meta.db_table) + ' ' + "table_latest_date:" + str(self.table_latest_date)
 
     def crawl_process(self, date_list: list):
-
         for d in date_list:
             if self.nest is False:
                 df = getattr(self.crawl_class(d), self.crawl_method)()
@@ -287,22 +273,29 @@ class CrawlerProcess:
                     print(f'fail, check if {d} is a holiday')
             time.sleep(self.time_sleep)
 
+    @staticmethod
+    def monthly_import(start_date, end_date, deadline):
+        if end_date.day > deadline:
+            print(f"day > {deadline},Finish Update Work")
+            return None
+        # add 15 day to append month range,because deadline is 10,if the day is 1-9,it need update
+        end_date = end_date + datetime.timedelta(days=deadline)
+        date_list = month_range(start_date, end_date)
+        # jump next month, quick_method
+        if end_date.month is not start_date.month:
+            date_list = date_list[1:]
+            return date_list
+
     # 指定區間，主要為初始化table和測試用
     def specified_date_crawl(self, start_date: str, end_date: str, deadline=15):
-
         start_date = datetime.datetime.strptime(start_date, "%Y-%m-%d")
         end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d")
-
         try:
             if (start_date - end_date).days <= 0:
                 if self.range_date == 'date_range':
                     date_list = date_range(start_date, end_date)[1:]
                 elif self.range_date == 'month_range':
-                    end_date = end_date + datetime.timedelta(days=deadline)
-                    date_list = month_range(start_date, end_date)
-                    # jump next month, quick_method
-                    if end_date.month is not start_date.month:
-                        date_list = date_list[1:]
+                    date_list = monthly_import(self, start_date, end_date, deadline)
                 else:
                     print(f"Finish Update Work")
                     return None
@@ -310,7 +303,6 @@ class CrawlerProcess:
                 self.crawl_process(date_list)
             else:
                 print(f"The start_date > your end_date,please modify your start_date <={end_date} .")
-
         except ValueError:
             print('Error:last_day form is %Y-%m-%d or df include NaTType,it does not support utcoffset ')
             return None
@@ -327,7 +319,6 @@ class CrawlerProcess:
                     return 1
                 else:
                     return 2
-
             elif self.range_date == 'month_range':
                 return 0
         except TypeError:
@@ -336,7 +327,6 @@ class CrawlerProcess:
 
     # 自動爬取結尾後日期的資料
     def auto_update_crawl(self, last_day='Now', deadline=15):
-
         try:
             if last_day == 'Now':
                 end_date = datetime.datetime.now()
@@ -349,19 +339,10 @@ class CrawlerProcess:
                     # [1:] avoid same index,let program be faster
                     date_list = date_range(start_date, end_date)[1:]
                 elif self.range_date == 'month_range':
-                    if end_date.day > 15:
-                        print(f"day > 15,Finish Update Work")
-                        return None
-                    # add 15 day to append month range,because deadline is 10,if the day is 1-9,it need update
-                    end_date = end_date + datetime.timedelta(days=deadline)
-                    date_list = month_range(start_date, end_date)
-                    # jump next month, quick_method
-                    if end_date.month is not start_date.month:
-                        date_list = date_list[1:]
+                    date_list = monthly_import(self, start_date, end_date, deadline)
                 else:
                     date_list = season_range(start_date, end_date)
                 self.crawl_process(date_list)
-
             elif self.working_process() == 1:
                 print(f"Finish Update Work")
                 return None
@@ -371,7 +352,6 @@ class CrawlerProcess:
             else:
                 print(f"The table_latest_date > your setting date,please modify your setting date >{last_day} .")
                 return None
-
         except ValueError:
             print('Error:last_day form is %Y-%m-%d,please modify. ')
             return None
