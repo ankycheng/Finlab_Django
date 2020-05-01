@@ -35,3 +35,13 @@ def last_month(date):
     return url_date
 
 
+"""""
+垃圾字切片
+"""""
+
+
+def char_filter(target, *trash_key):
+    for trash_word in trash_key:
+        if trash_word in target:
+            target = target[:target.index(trash_word)]
+    return target

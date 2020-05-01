@@ -11,6 +11,7 @@ class StockPriceTW(models.Model):
     low_price = models.FloatField(blank=True, null=True, verbose_name="最低價")
     turnover_vol = models.FloatField(blank=True, null=True, verbose_name="成交股數")
     turnover_price = models.FloatField(blank=True, null=True, verbose_name="成交金額")
+    market = models.CharField(default=None, max_length=100, verbose_name="市場別")
 
 
 class MonthlyRevenueTW(models.Model):
@@ -63,6 +64,7 @@ class CompanyBasicInfoTW(models.Model):
     latitude = models.FloatField(blank=True, null=True, default=None, verbose_name="緯度")
     city = models.CharField(blank=True, null=True, default=None, max_length=100, verbose_name="縣市")
     district = models.CharField(blank=True, null=True, default=None, max_length=100, verbose_name="鄉鎮區")
+    market = models.CharField(default=None, max_length=10, verbose_name="市場別")
 
     def __str__(self):
         return self.stock_id + ' ' + str(self.short_name)
@@ -71,17 +73,6 @@ class CompanyBasicInfoTW(models.Model):
     def stock_issued_num(self):
         return round(self.capital / 10000)
 
-    @property
-    def market(self):
-        if self.sii_date is not None:
-            return '上市'
-        elif self.otc_date is not None:
-            return '上櫃'
-        else:
-            return '興櫃'
-
-    # custom fields  short_description
-    market.fget.short_description = '市場別'
     stock_issued_num.fget.short_description = '發行股票張數'
 
 
@@ -119,7 +110,50 @@ class BrokerTradeTW(models.Model):
     buy_num = models.FloatField(blank=True, null=True, verbose_name="買進")
     sell_num = models.FloatField(blank=True, null=True, verbose_name="賣出")
     net_bs = models.FloatField(blank=True, null=True, verbose_name="買賣超")
+    net_bs_cost = models.FloatField(blank=True, null=True, verbose_name="買賣超金額")
     transactions_pt = models.FloatField(blank=True, null=True, verbose_name="成交占比")
     broker_info = models.ForeignKey("BrokerInfoTW", blank=True, null=True, on_delete=models.SET_NULL,
                                     db_constraint=False, verbose_name="券商資訊")
+
+
+class StockTiiTW(models.Model):
+    stock_id = models.CharField(max_length=100, verbose_name="證券代號")
+    date = models.DateTimeField(verbose_name="資料日期")
+    stock_name = models.CharField(max_length=100, null=True, verbose_name="證券名稱")
+    fm_buy = models.FloatField(blank=True, null=True, verbose_name="外陸資買進股數(不含外資自營商)")
+    fm_sell = models.FloatField(blank=True, null=True, verbose_name="外陸資賣出股數(不含外資自營商)")
+    fm_net = models.FloatField(blank=True, null=True, verbose_name="外陸資買賣超股數(不含外資自營商)")
+    fd_buy = models.FloatField(blank=True, null=True, verbose_name="外資自營商買進股數")
+    fd_sell = models.FloatField(blank=True, null=True, verbose_name="外資自營商賣出股數")
+    fd_net = models.FloatField(blank=True, null=True, verbose_name="外資自營商買賣超股數")
+    ft_net = models.FloatField(blank=True, null=True, verbose_name="全外資買賣超股數")
+    itc_buy = models.FloatField(blank=True, null=True, verbose_name="投信買進股數")
+    itc_sell = models.FloatField(blank=True, null=True, verbose_name="投信賣出股數")
+    itc_net = models.FloatField(blank=True, null=True, verbose_name="投信買賣超股數")
+    dealer_ppt_buy = models.FloatField(blank=True, null=True, verbose_name="自營商買進股數(自行買賣)")
+    dealer_ppt_sell = models.FloatField(blank=True, null=True, verbose_name="自營商賣出股數(自行買賣)")
+    dealer_ppt_net = models.FloatField(blank=True, null=True, verbose_name="自營商買賣超股數(自行買賣)")
+    dealer_hedge_buy = models.FloatField(blank=True, null=True, verbose_name="自營商買進股數(避險")
+    dealer_hedge_sell = models.FloatField(blank=True, null=True, verbose_name="自營商賣出股數(避險")
+    dealer_hedge_net = models.FloatField(blank=True, null=True, verbose_name="自營商買賣超股數(避險")
+    dealer_net = models.FloatField(blank=True, null=True, verbose_name="全自營商買賣超股數")
+    tii_net = models.FloatField(blank=True, null=True, verbose_name="三大法人買賣超股數")
+
+
+class StockTiiMarketReportTW(models.Model):
+    stock_id = models.CharField(max_length=100, verbose_name="證券代號")
+    date = models.DateTimeField(verbose_name="資料日期")
+    buy_price = models.FloatField(blank=True, null=True, verbose_name="買進金額")
+    sell_price = models.FloatField(blank=True, null=True, verbose_name="賣出金額")
+    net = models.FloatField(blank=True, null=True, verbose_name="買賣超金額")
+
+
+class StockTdccTW(models.Model):
+    stock_id = models.CharField(max_length=100, verbose_name="證券代號")
+    date = models.DateTimeField(verbose_name="資料日期")
+    stock_id_fk = models.CharField(max_length=100, verbose_name="證券價格外鍵")
+    hold_class = models.FloatField(blank=True, null=True, verbose_name="分級代號")
+    people = models.FloatField(blank=True, null=True, verbose_name="人數")
+    hold_num = models.FloatField(blank=True, null=True, verbose_name="持有股數")
+    hold_pt = models.FloatField(blank=True, null=True, verbose_name="分級占比")
 
