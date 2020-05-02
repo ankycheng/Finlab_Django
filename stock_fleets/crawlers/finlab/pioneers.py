@@ -775,11 +775,12 @@ class CrawlStockMarginTransactionsTW:
         content = "\n".join(lines)
         if content == '':
             return None
-        df = pd.read_csv(StringIO(content)).dropna(how='all', axis=1)
+        df = pd.read_csv(StringIO(content)).dropna(how='all', axis=1).dropna(thresh=15)
         if len(df) < 1:
             return None
         df = df.astype(str)
         df = df.apply(lambda s: s.str.replace(',', ''))
+        df['股票代號'] = df['股票代號'].apply(lambda s: '00' + s if len(s) < 3 else s)
         df = df.rename(columns={'股票代號': 'stock_id', '股票名稱': 'stock_name',
                                 '買進': 'mt_buy', '賣出': 'mt_sell',
                                 '現金償還': 'cash_redemption', '前日餘額': 'mt_balance_pd',
@@ -805,11 +806,12 @@ class CrawlStockMarginTransactionsTW:
         r = requests.get(
             'http://www.tpex.org.tw/web/stock/margin_trading/margin_balance/margin_bal_result.php?l=zh-tw&o=csv&d='
             + date_str + '&s=0,asc,0')
-        df = pd.read_csv(StringIO(r.text), header=2).dropna(how='all', axis=1).dropna(how='any')
+        df = pd.read_csv(StringIO(r.text), header=2).dropna(how='all', axis=1).dropna(thresh=15)
         if len(df) < 10:
             return None
         df = df.astype(str).apply(lambda s: s.str.replace(',', ''))
         df.columns = [col.replace(' ', '') for col in df.columns]
+        df['代號'] = df['代號'].apply(lambda s: '00' + s if len(s) < 3 else s)
         df = df.rename(columns={'代號': 'stock_id', '名稱': 'stock_name',
                                 '資買': 'mt_buy', '資賣': 'mt_sell',
                                 '現償': 'cash_redemption', '前資餘額(張)': 'mt_balance_pd',
