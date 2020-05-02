@@ -33,7 +33,6 @@ engine = create_engine(connect_info)
 
 
 def date_range(start_date, end_date):
-    # Todo
     return [dt.date() for dt in rrule(DAILY, dtstart=start_date, until=end_date)]
 
 
@@ -54,10 +53,8 @@ def month_range(start_date, end_date):
 def season_range(start_date, end_date):
     if isinstance(start_date, datetime.datetime):
         start_date = start_date.date()
-
     if isinstance(end_date, datetime.datetime):
         end_date = end_date.date()
-
     ret = []
     for year in range(start_date.year - 1, end_date.year + 1):
         ret += [datetime.date(year, 5, 15),
@@ -259,7 +256,6 @@ class CrawlerProcess:
                     ret = df.drop_duplicates(['stock_id', 'date'], keep='last')
                     AddToSQL.add_to_sql(self.model_name, ret, *self.fk_columns)
                     print(f'Finish {d} Data')
-
                 # holiday is blank
                 except AttributeError:
                     print(f'fail, check if {d} is a holiday')
@@ -284,7 +280,7 @@ class CrawlerProcess:
         # jump next month, quick_method
         if end_date.month is not start_date.month:
             date_list = date_list[1:]
-            return date_list
+        return date_list
 
     # 指定區間，主要為初始化table和測試用
     def specified_date_crawl(self, start_date: str, end_date: str, deadline=15):
@@ -299,7 +295,6 @@ class CrawlerProcess:
                 else:
                     print(f"Finish Update Work")
                     return None
-
                 self.crawl_process(date_list)
             else:
                 print(f"The start_date > your end_date,please modify your start_date <={end_date} .")
@@ -319,7 +314,7 @@ class CrawlerProcess:
                     return 1
                 else:
                     return 2
-            elif self.range_date == 'month_range':
+            else:
                 return 0
         except TypeError:
             print(f"Please use specified_date_crawl to Init Table ")

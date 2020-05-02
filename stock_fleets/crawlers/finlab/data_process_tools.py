@@ -45,3 +45,18 @@ def char_filter(target, *trash_key):
         if trash_word in target:
             target = target[:target.index(trash_word)]
     return target
+
+
+"""""
+字元取代循環
+"""""
+
+
+def symbols_change(word, target={}):
+    if len(word) > 0:
+        for sym, value in target.items():
+            if sym in word:
+                word = word.replace(sym, '_' + value)
+        if word[0] is '_':
+            word = word[1:]
+    return word

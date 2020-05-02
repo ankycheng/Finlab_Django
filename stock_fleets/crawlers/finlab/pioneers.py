@@ -2,7 +2,7 @@ import pandas as pd
 from io import StringIO
 import requests
 import datetime
-from crawlers.finlab.data_process_tools import year_transfer, last_month, char_filter
+from crawlers.finlab.data_process_tools import *
 from crawlers.finlab.import_tools import AddToSQL
 from crawlers.models import CompanyBasicInfoTW, BrokerInfoTW, BrokerTradeTW
 from django.core.exceptions import ObjectDoesNotExist
@@ -65,6 +65,7 @@ class CrawlStockPriceTW:
         lines = r.text.replace("\r", "").split("\n")
         try:
             df = pd.read_csv(StringIO("\n".join(lines[3:])), header=None)
+            df = df.astype(str)
         except pd.errors.ParserError:
             return None
         df.columns = list(map(lambda s: s.replace(" ", ""), lines[2].split(",")))
@@ -457,8 +458,8 @@ class GetNTLSxy:
             address = address.replace(i, '')
         address = char_filter(address, '及', '部分', '、', ',', '（')
         # 解決郵遞區號問題
-        filter_num = filter(str.isalpha, address[:6])
-        address = ''.join(list(filter_num)) + address[6:]
+        filter_num = filter(str.isalpha, address[:7])
+        address = ''.join(list(filter_num)) + address[7:]
         url = 'https://moisagis.moi.gov.tw/moiap/gis2010/content/user/matchservice/singleMatch.cfm'
         form = {
             'address': address,
@@ -618,7 +619,7 @@ class CrawlStockTiiTW:
             df = pd.read_csv(StringIO(r.text), header=1).dropna(how='all', axis=1).dropna(how='any')
         except pd.errors.ParserError:
             return None
-        df = df.astype(str).apply(lambda s: s.str.replace(',', ''))
+        df = df.astype(str).apply(lambda s: s.str.replace(',', '').replace(' ', ''))
         df['代號'] = df['代號'].str.replace('=', '').str.replace('"', '')
         df.iloc[:, 2:] = df.iloc[:, 2:].apply(lambda s: pd.to_numeric(s, errors='coerce')).dropna(how='all', axis=1)
         df = df.rename(columns={'代號': 'stock_id', '名稱': 'stock_name',
@@ -706,7 +707,7 @@ class CrawlStockTiiMarketReportTW:
             df = pd.read_csv(StringIO(r.text), header=1).dropna(how='all', axis=1).dropna(how='any')
         except pd.errors.ParserError:
             return None
-        df = df.astype(str).apply(lambda s: s.str.replace(',', '').str.replace('', ''))
+        df = df.astype(str).apply(lambda s: s.str.replace(',', ''))
         df.iloc[:, 1:] = df.iloc[:, 1:].apply(lambda s: pd.to_numeric(s, errors='coerce')).dropna(how='all', axis=1)
         df = df.rename(
             columns={'單位名稱': 'stock_id', '買進金額(元)': 'buy_price',
@@ -754,4 +755,81 @@ class CrawlStockTdccTW:
         df.iloc[:, 2:6] = df.iloc[:, 2:6].apply(lambda s: pd.to_numeric(s, errors="coerce"))
         df['date'] = df[df.columns[0]].apply(lambda s: datetime.datetime.strptime(s, '%Y%m%d'))
         df = df.drop(columns=df.columns[0])
+        return df
+
+
+class CrawlStockMarginTransactionsTW:
+    def __init__(self, date):
+        self.date = date
+        self.date_str = date.strftime("%Y%m%d")
+        self.target_name = "台股融資交易資訊"
+        self.sub_market = ["sii", "otc"]
+        self.format = "time_series"
+
+    def crawl_sii(self):
+        r = requests.get(
+            'http://www.twse.com.tw/exchangeReport/MI_MARGN?response=csv&date=' + self.date_str + '&selectType=ALL')
+        content = r.text.replace('=', '')
+        lines = content.split('\n')
+        lines = list(filter(lambda l: len(l.split('",')) > 10, lines))
+        content = "\n".join(lines)
+        if content == '':
+            return None
+        df = pd.read_csv(StringIO(content)).dropna(how='all', axis=1)
+        if len(df) < 1:
+            return None
+        df = df.astype(str)
+        df = df.apply(lambda s: s.str.replace(',', ''))
+        df = df.rename(columns={'股票代號': 'stock_id', '股票名稱': 'stock_name',
+                                '買進': 'mt_buy', '賣出': 'mt_sell',
+                                '現金償還': 'cash_redemption', '前日餘額': 'mt_balance_pd',
+                                '今日餘額': 'mt_balance_now', '限額': 'mt_quota',
+                                '買進.1': 'short_covering', '賣出.1': 'short_sale',
+                                '現券償還': 'stock_redemption', '前日餘額.1': 'ss_balance_pd',
+                                '今日餘額.1': 'ss_balance_now', '限額.1': 'ss_quota',
+                                '資券互抵': 'offset', '註記': 'note'})
+        df.iloc[:, 2:-1] = df.iloc[:, 2:-1].apply(lambda s: pd.to_numeric(s, errors='coerce'))
+
+        df['note'] = [symbols_change(i, {'O': '停止融資', 'X': '停止融券', '@': '融資分配', '%': '融券分配', '!': '停止買賣'}) for i in
+                      df['note']]
+        df['mt_use_rate'] = [round(v / q * 100, 2) if q > 0 else 100 if v > 0 else 0 for v, q in
+                             zip(df['mt_balance_now'], df['mt_quota'])]
+        df['ss_use_rate'] = [round(v / q * 100, 2) if q > 0 else 100 if v > 0 else 0 for v, q in
+                             zip(df['ss_balance_now'], df['ss_quota'])]
+        df['date'] = pd.to_datetime(self.date)
+        return df
+
+    def crawl_otc(self):
+        y = str(int(self.date.strftime("%Y")) - 1911)
+        date_str = y + "/" + self.date.strftime("%m") + "/" + self.date.strftime("%d")
+        r = requests.get(
+            'http://www.tpex.org.tw/web/stock/margin_trading/margin_balance/margin_bal_result.php?l=zh-tw&o=csv&d='
+            + date_str + '&s=0,asc,0')
+        df = pd.read_csv(StringIO(r.text), header=2).dropna(how='all', axis=1).dropna(how='any')
+        if len(df) < 10:
+            return None
+        df = df.astype(str).apply(lambda s: s.str.replace(',', ''))
+        df.columns = [col.replace(' ', '') for col in df.columns]
+        df = df.rename(columns={'代號': 'stock_id', '名稱': 'stock_name',
+                                '資買': 'mt_buy', '資賣': 'mt_sell',
+                                '現償': 'cash_redemption', '前資餘額(張)': 'mt_balance_pd',
+                                '資餘額': 'mt_balance_now', '資限額': 'mt_quota',
+                                '券買': 'short_covering', '券賣': 'short_sale',
+                                '券償': 'stock_redemption', '前券餘額(張)': 'ss_balance_pd',
+                                '券餘額': 'ss_balance_now', '券限額': 'ss_quota',
+                                '資券相抵(張)': 'offset', '備註': 'note',
+                                '資使用率(%)': 'mt_use_rate', '券使用率(%)': 'ss_use_rate'})
+        df = df.drop(columns=['資屬證金', '券屬證金'])
+        df.iloc[:, 2:-1] = df.iloc[:, 2:-1].apply(lambda s: pd.to_numeric(s, errors='coerce'))
+        df['note'] = [symbols_change(i, {'O': '停止融資', 'X': '停止融券', '@': '融資分配', '%': '融券分配', '!': '停止買賣',
+                                         '*': '融券餘額占融資餘額百分之六十以上者', 'A': '股價波動過度劇烈', 'B': '股權過度集中',
+                                         'C': '成交量過度異常', 'D': '監視第二次處置'}) for i in df['note']]
+        df['date'] = pd.to_datetime(self.date)
+        return df
+
+    def crawl_main(self):
+        try:
+            df = pd.concat([self.crawl_sii(), self.crawl_otc()], sort=False)
+        except ValueError:
+            return None
         return df
