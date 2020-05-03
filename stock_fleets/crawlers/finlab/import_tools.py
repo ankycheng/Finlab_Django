@@ -2,7 +2,6 @@ import datetime
 import time
 import os
 import pandas as pd
-import json5
 from dateutil.rrule import rrule, DAILY, MONTHLY
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.conf import settings
@@ -10,9 +9,9 @@ from sqlalchemy import create_engine
 from django.db import models
 
 """""
-資料庫設定
+DB connection
 """""
-# 資料庫連線
+
 dbName = (
     settings.CONFIG_DATA.get("DBNAME")
     if settings.CONFIG_DATA.get("PRODUCTION")
@@ -28,7 +27,7 @@ connect_info = "mysql+pymysql://{}:{}@{}:{}/{}?charset=utf8".format(
 engine = create_engine(connect_info)
 
 """""
-日單位集合產生器
+date generator
 """""
 
 
@@ -36,18 +35,8 @@ def date_range(start_date, end_date):
     return [dt.date() for dt in rrule(DAILY, dtstart=start_date, until=end_date)]
 
 
-"""""
-月單位集合產生器
-"""""
-
-
 def month_range(start_date, end_date):
     return [dt.date() for dt in rrule(MONTHLY, dtstart=start_date, until=end_date)]
-
-
-"""""
-季單位集合產生器
-"""""
 
 
 def season_range(start_date, end_date):
@@ -67,18 +56,13 @@ def season_range(start_date, end_date):
 
 
 """""
-Table存在判斷
+Table check tools
 """""
 
 
 def table_exist(conn, table):
     return list(conn.execute(
         "select count(*) from information_schema.tables where TABLE_NAME=" + "'" + table + "'"))[0][0] == 1
-
-
-"""""
-Table最新資料日
-"""""
 
 
 def table_latest_date(conn, table):
@@ -89,22 +73,12 @@ def table_latest_date(conn, table):
         return print("No Data")
 
 
-"""""
-Table最早資料日
-"""""
-
-
 def table_earliest_date(conn, table):
     try:
         cursor = list(conn.execute('SELECT date FROM ' + table + ' ORDER BY date ASC LIMIT 1;'))
         return cursor[0][0]
     except IndexError:
         return print("No Data")
-
-
-"""""
-Table日期存在判斷
-"""""
 
 
 def in_date_list(conn, model_name, check_date):
@@ -121,47 +95,65 @@ def in_date_list(conn, model_name, check_date):
 
 
 """""
-Dataframe匯入DB,適用時間序列資料,*fk_columns-外鍵對應過濾用欄位名
+Dataframe匯入DB,適用時間序列資料,fk_columns-外鍵對應過濾用欄位名
 """""
 
 
 class AddToSQL:
-
     @classmethod
-    def fk_import(cls, model_name, df, *fk_columns):
+    def get_fk_field_names(cls, model_name):
         fk_field_names = [field.name for field in model_name._meta.fields
                           if isinstance(field, models.ForeignKey)]
-        fk_remote = [model_name._meta.get_field(i).remote_field.model for i in fk_field_names]
-        fk_obj = [m.objects.filter(**{n: df[r]}).first() for m, n, r in zip(fk_remote, *fk_columns, fk_field_names)]
-        data = {'fk_field_names': fk_field_names, 'fk_remote': fk_remote, 'fk_obj': fk_obj}
+        return fk_field_names
+
+    @classmethod
+    def corr_obj(cls, model_name, attributes):
+        try:
+            df = model_name.objects.get(**attributes)
+            return df
+        except ObjectDoesNotExist:
+            pass
+
+    @classmethod
+    def fk_import(cls, model_name, df, fk_columns):
+        fk_field_names = cls.get_fk_field_names(model_name)
+        fk_remote_model = [model_name._meta.get_field(i).remote_field.model for i in fk_field_names]
+        filter_dict = [{a: df[b] for a, b in sub_dict.items()} for sub_dict in fk_columns]
+        fk_obj = [cls.corr_obj(m, n) for m, n in zip(fk_remote_model, filter_dict)]
+        data = {'fk_field_names': fk_field_names, 'fk_obj': fk_obj}
         return data
 
     @classmethod
-    def fk_create(cls):
-        data = cls.fk_import
+    def fk_create(cls, model_name, df, fk_columns):
+        data = cls.fk_import(model_name, df, fk_columns)
         fk_create_data = dict((m, n) for m, n in zip(data['fk_field_names'], data['fk_obj']))
         return fk_create_data
 
     @classmethod
-    def fk_update(cls):
-        data = cls.fk_import
+    def fk_update(cls, model_name, df, fk_columns):
+        data = cls.fk_import(model_name, df, fk_columns)
         return zip(data['fk_field_names'], data['fk_obj'])
 
     @classmethod
-    def add_to_sql(cls, model_name, df, *fk_columns):
+    def pk_select(cls, df, pk_columns=None):
+        if pk_columns is None:
+            pk_columns = ['stock_id', 'date']
+        get_pk_dict = {pk: df[pk] for pk in pk_columns}
+        get_pk_contain_dict = {pk + '__contain': df[pk] for pk in pk_columns}
+        return [get_pk_dict, get_pk_contain_dict]
+
+    @classmethod
+    def add_to_sql(cls, model_name, df, pk_columns=None, fk_columns=None):
         df = df.where(pd.notnull(df), None)
         columns_list = list(df.columns.values)
-        # delete fk_columns , db only save fk_id
-        for i in fk_columns:
-            columns_list.remove(i)
         bulk_update_data = []
         bulk_create_data = []
 
         def bulk_create_func(bc_model_name, bc_columns_list):
             obj_create_data = dict((field, item[field]) for field in bc_columns_list)
             # 處理ForeignKey
-            if len(fk_columns) > 0:
-                obj_create_data.update(cls.fk_create())
+            if fk_columns is not None:
+                obj_create_data.update(cls.fk_create(model_name, item, fk_columns))
             obj_create = bc_model_name(**obj_create_data)
             bulk_create_data.append(obj_create)
 
@@ -171,7 +163,6 @@ class AddToSQL:
             check_date = in_date_list(engine, model_name, data_date)
         else:
             check_date = True
-
         if check_date is False:
             # Change CSV to iterrow
             for index, item in df.iterrows():
@@ -186,24 +177,20 @@ class AddToSQL:
             for index, item in df.iterrows():
                 # Use bulk_update to update obj,PS:must include primekey column
                 try:
+                    pk_filter = cls.pk_select(item, pk_columns)
                     try:
-                        if 'date' in columns_list:
-                            obj_check = model_name.objects.get(stock_id=item['stock_id'], date=item['date'])
-                        else:
-                            obj_check = model_name.objects.get(stock_id=item['stock_id'])
-                    # 無法區分字母大小寫
+                        obj_check = model_name.objects.get(**pk_filter[0])
+                    # 無法區分字母大小寫,回傳2個值
                     except MultipleObjectsReturned:
-                        if 'date' in columns_list:
-                            obj_check = model_name.objects.get(stock_id__contains=item['stock_id'], date=item['date'])
-                        else:
-                            obj_check = model_name.objects.get(stock_id__contains=item['stock_id'])
+                        obj_check = model_name.objects.get(**pk_filter[1])
+
                     attribute_data = columns_list
                     update_data = [item[field] for field in columns_list]
                     for attribute, update_value in zip(attribute_data, update_data):
                         setattr(obj_check, attribute, update_value)
-                    # 處理ForeignKey
-                    if len(fk_columns) > 0:
-                        for attribute, update_value in cls.fk_update():
+                    # ForeignKey update
+                    if fk_columns is not None:
+                        for attribute, update_value in cls.fk_update(model_name, item, fk_columns):
                             setattr(obj_check, attribute, update_value)
                     bulk_update_data.append(obj_check)
                 # Use dict to bulk_create obj when get nothing ,process incomplete data
@@ -230,20 +217,23 @@ Attributes:
 crawl_class-爬蟲類別、crawl_method-類別執行方法、model_name-存取資料庫模型、range_date-爬蟲日期產生器週期選擇
 time_sleep-爬蟲間隔時間
 nest-巢狀爬蟲，一日內執行多次，分次輸入，不用整併每日後再輸入，避免中斷白工
+pk_columns-update檢測用主鍵群
 fk_columns-外鍵對應過濾用欄位名
 """""
 
 
 class CrawlerProcess:
-    def __init__(self, crawl_class, crawl_method, model_name, range_date, nest=False, time_sleep=8, *fk_columns):
+    def __init__(self, crawl_class, crawl_method, model_name, range_date, nest=False, time_sleep=8, pk_columns=None,
+                 fk_columns=None):
         self.crawl_class = crawl_class
         self.crawl_method = crawl_method
         self.model_name = model_name
         self.table_latest_date = table_latest_date(engine, self.model_name._meta.db_table)
         self.range_date = range_date
         self.nest = nest
-        self.fk_columns = fk_columns
         self.time_sleep = time_sleep
+        self.pk_columns = pk_columns
+        self.fk_columns = fk_columns
 
     def __repr__(self):
         return str(self.model_name._meta.db_table) + ' ' + "table_latest_date:" + str(self.table_latest_date)
@@ -254,7 +244,7 @@ class CrawlerProcess:
                 df = getattr(self.crawl_class(d), self.crawl_method)()
                 try:
                     ret = df.drop_duplicates(['stock_id', 'date'], keep='last')
-                    AddToSQL.add_to_sql(self.model_name, ret, *self.fk_columns)
+                    AddToSQL.add_to_sql(self.model_name, ret, self.pk_columns, self.fk_columns)
                     print(f'Finish {d} Data')
                 # holiday is blank
                 except AttributeError:
@@ -291,20 +281,20 @@ class CrawlerProcess:
                 if self.range_date == 'date_range':
                     date_list = date_range(start_date, end_date)[1:]
                 elif self.range_date == 'month_range':
-                    date_list = monthly_import(self, start_date, end_date, deadline)
+                    date_list = self.monthly_import(start_date, end_date, deadline)
                 else:
                     print(f"Finish Update Work")
                     return None
                 self.crawl_process(date_list)
             else:
                 print(f"The start_date > your end_date,please modify your start_date <={end_date} .")
-        except ValueError:
-            print('Error:last_day form is %Y-%m-%d or df include NaTType,it does not support utcoffset ')
+        except Exception as e:
+            print(e)
             return None
 
     # 進度判斷
     def working_process(self):
-        recent = datetime.datetime.now()
+        recent = datetime.datetime.now().date()
         try:
             day_num = (recent - self.table_latest_date).days
             if self.range_date == 'date_range':
@@ -327,14 +317,13 @@ class CrawlerProcess:
                 end_date = datetime.datetime.now()
             else:
                 end_date = datetime.datetime.strptime(last_day, "%Y-%m-%d")
-
             if self.working_process() == 0:
                 start_date = self.table_latest_date
                 if self.range_date == 'date_range':
                     # [1:] avoid same index,let program be faster
                     date_list = date_range(start_date, end_date)[1:]
                 elif self.range_date == 'month_range':
-                    date_list = monthly_import(self, start_date, end_date, deadline)
+                    date_list = self.monthly_import(start_date, end_date, deadline)
                 else:
                     date_list = season_range(start_date, end_date)
                 self.crawl_process(date_list)

@@ -3,7 +3,7 @@ from django.db import models
 
 class StockPriceTW(models.Model):
     stock_id = models.CharField(max_length=100, verbose_name="證券代號")
-    date = models.DateTimeField(verbose_name="資料日期")
+    date = models.DateField(verbose_name="資料日期")
     stock_name = models.CharField(max_length=100, null=True, verbose_name="證券名稱")
     open_price = models.FloatField(blank=True, null=True, verbose_name="開盤價")
     close_price = models.FloatField(blank=True, null=True, verbose_name="收盤價")
@@ -16,7 +16,7 @@ class StockPriceTW(models.Model):
 
 class MonthlyRevenueTW(models.Model):
     stock_id = models.CharField(max_length=100, verbose_name="證券代號")
-    date = models.DateTimeField(verbose_name="資料日期")
+    date = models.DateField(verbose_name="資料日期")
     stock_name = models.CharField(max_length=100, null=True, verbose_name="公司名稱")
     this_month_rev = models.FloatField(blank=True, null=True, verbose_name="當月營收")
     last_month_rev = models.FloatField(blank=True, null=True, verbose_name="上月營收")
@@ -31,7 +31,7 @@ class MonthlyRevenueTW(models.Model):
 
 class CompanyBasicInfoTW(models.Model):
     stock_id = models.CharField(max_length=100, verbose_name="證券代號")
-    update_time = models.DateTimeField(verbose_name="資料日期")
+    update_time = models.DateField(verbose_name="資料日期")
     name = models.CharField(blank=True, null=True, max_length=100, verbose_name="公司名稱")
     short_name = models.CharField(blank=True, null=True, max_length=100, verbose_name="公司簡稱")
     category = models.CharField(blank=True, null=True, max_length=100, verbose_name="產業類別")
@@ -78,14 +78,14 @@ class CompanyBasicInfoTW(models.Model):
 
 class StockIndexPriceTW(models.Model):
     stock_id = models.CharField(max_length=100, verbose_name="證券代號")
-    date = models.DateTimeField(verbose_name="資料日期")
+    date = models.DateField(verbose_name="資料日期")
     index_price = models.FloatField(blank=True, null=True, verbose_name="指數點數")
     quote_change = models.FloatField(blank=True, null=True, verbose_name="漲跌百分比")
 
 
 class StockIndexVolTW(models.Model):
     stock_id = models.CharField(max_length=100, verbose_name="證券代號")
-    date = models.DateTimeField(verbose_name="資料日期")
+    date = models.DateField(verbose_name="資料日期")
     turnover_vol = models.FloatField(blank=True, null=True, verbose_name="成交股數")
     turnover_price = models.FloatField(blank=True, null=True, verbose_name="成交金額")
     turnover_num = models.BigIntegerField(blank=True, null=True, verbose_name="成交筆數")
@@ -106,19 +106,22 @@ class BrokerInfoTW(models.Model):
 
 class BrokerTradeTW(models.Model):
     stock_id = models.CharField(max_length=100, verbose_name="分點進出代號")
-    date = models.DateTimeField(verbose_name="資料日期")
+    date = models.DateField(verbose_name="資料日期")
     buy_num = models.FloatField(blank=True, null=True, verbose_name="買進")
     sell_num = models.FloatField(blank=True, null=True, verbose_name="賣出")
     net_bs = models.FloatField(blank=True, null=True, verbose_name="買賣超")
     net_bs_cost = models.FloatField(blank=True, null=True, verbose_name="買賣超金額")
     transactions_pt = models.FloatField(blank=True, null=True, verbose_name="成交占比")
+    broker_name = models.CharField(max_length=100, default=None, verbose_name="券商名稱")
     broker_info = models.ForeignKey("BrokerInfoTW", blank=True, null=True, on_delete=models.SET_NULL,
                                     db_constraint=False, verbose_name="券商資訊")
+    company_info = models.ForeignKey("CompanyBasicInfoTW", blank=True, null=True, on_delete=models.SET_NULL,
+                                     db_constraint=False, verbose_name="公司資訊")
 
 
 class StockTiiTW(models.Model):
     stock_id = models.CharField(max_length=100, verbose_name="證券代號")
-    date = models.DateTimeField(verbose_name="資料日期")
+    date = models.DateField(verbose_name="資料日期")
     stock_name = models.CharField(max_length=100, null=True, verbose_name="證券名稱")
     fm_buy = models.FloatField(blank=True, null=True, verbose_name="外陸資買進股數(不含外資自營商)")
     fm_sell = models.FloatField(blank=True, null=True, verbose_name="外陸資賣出股數(不含外資自營商)")
@@ -142,7 +145,7 @@ class StockTiiTW(models.Model):
 
 class StockTiiMarketReportTW(models.Model):
     stock_id = models.CharField(max_length=100, verbose_name="證券代號")
-    date = models.DateTimeField(verbose_name="資料日期")
+    date = models.DateField(verbose_name="資料日期")
     buy_price = models.FloatField(blank=True, null=True, verbose_name="買進金額")
     sell_price = models.FloatField(blank=True, null=True, verbose_name="賣出金額")
     net = models.FloatField(blank=True, null=True, verbose_name="買賣超金額")
@@ -150,8 +153,7 @@ class StockTiiMarketReportTW(models.Model):
 
 class StockTdccTW(models.Model):
     stock_id = models.CharField(max_length=100, verbose_name="證券代號")
-    date = models.DateTimeField(verbose_name="資料日期")
-    stock_id_fk = models.CharField(max_length=100, verbose_name="證券價格外鍵")
+    date = models.DateField(verbose_name="資料日期")
     hold_class = models.FloatField(blank=True, null=True, verbose_name="分級代號")
     people = models.FloatField(blank=True, null=True, verbose_name="人數")
     hold_num = models.FloatField(blank=True, null=True, verbose_name="持有股數")
@@ -160,7 +162,7 @@ class StockTdccTW(models.Model):
 
 class StockMarginTransactionsTW(models.Model):
     stock_id = models.CharField(max_length=100, verbose_name="證券代號")
-    date = models.DateTimeField(verbose_name="資料日期")
+    date = models.DateField(verbose_name="資料日期")
     stock_name = models.CharField(max_length=100, verbose_name="證券名稱")
     mt_buy = models.FloatField(blank=True, null=True, verbose_name="融資買進")
     mt_sell = models.FloatField(blank=True, null=True, verbose_name='融資賣出')
