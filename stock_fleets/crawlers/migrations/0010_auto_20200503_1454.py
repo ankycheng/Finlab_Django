@@ -27,4 +27,9 @@ class Migration(migrations.Migration):
             name='broker_name',
             field=models.CharField(default=None, max_length=100, verbose_name='券商名稱'),
         ),
+        migrations.AddField(
+            model_name='StockTiiMarketReportTW',
+            name='market',
+            field=models.CharField(default=None, max_length=10, verbose_name="市場別"),
+        ),
     ]

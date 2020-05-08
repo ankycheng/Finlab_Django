@@ -35,8 +35,8 @@ class CompanyBasicInfoTW(models.Model):
     name = models.CharField(blank=True, null=True, max_length=100, verbose_name="公司名稱")
     short_name = models.CharField(blank=True, null=True, max_length=100, verbose_name="公司簡稱")
     category = models.CharField(blank=True, null=True, max_length=100, verbose_name="產業類別")
-    registered_country = models.CharField(blank=True, null=True, max_length=100, verbose_name="企業註冊地國")
-    address = models.CharField(blank=True, null=True, max_length=100, verbose_name="公司總部地址")
+    registered_country = models.CharField(blank=True, null=True, max_length=500, verbose_name="企業註冊地國")
+    address = models.CharField(blank=True, null=True, max_length=500, verbose_name="公司總部地址")
     chairman = models.CharField(blank=True, null=True, max_length=100, verbose_name="董事長")
     ceo = models.CharField(blank=True, null=True, max_length=100, verbose_name="總經理")
     spokesman = models.CharField(blank=True, null=True, max_length=100, verbose_name="發言人")
@@ -50,28 +50,28 @@ class CompanyBasicInfoTW(models.Model):
     shares_issued = models.BigIntegerField(blank=True, null=True, verbose_name="普通股發行股本")
     private_shares = models.BigIntegerField(blank=True, null=True, verbose_name="私募普通股數")
     special_shares = models.BigIntegerField(blank=True, null=True, verbose_name="特別股數")
-    dividend_frequency = models.CharField(blank=True, null=True, max_length=500,
+    dividend_frequency = models.CharField(blank=True, null=True, max_length=100,
                                           verbose_name="普通股盈餘分派或虧損撥補頻率")
-    stock_transfer_institution = models.CharField(blank=True, null=True, max_length=500, verbose_name="股票過戶機構")
-    visa_accounting_firm = models.CharField(blank=True, null=True, max_length=500, verbose_name="簽證會計師事務所")
+    stock_transfer_institution = models.CharField(blank=True, null=True, max_length=100, verbose_name="股票過戶機構")
+    visa_accounting_firm = models.CharField(blank=True, null=True, max_length=100, verbose_name="簽證會計師事務所")
     website = models.CharField(blank=True, null=True, max_length=500, verbose_name="公司網址")
     investor_relations_contact = models.CharField(blank=True, null=True, max_length=500,
                                                   verbose_name="投資人關係聯絡電話")
     investor_relations_email = models.CharField(blank=True, null=True, max_length=500,
                                                 verbose_name="投資人關係聯絡電子郵件")
-    english_abbreviation = models.CharField(blank=True, null=True, max_length=500, verbose_name="英文簡稱")
+    english_abbreviation = models.CharField(blank=True, null=True, max_length=100, verbose_name="英文簡稱")
     longitude = models.FloatField(blank=True, null=True, default=None, verbose_name="經度")
     latitude = models.FloatField(blank=True, null=True, default=None, verbose_name="緯度")
     city = models.CharField(blank=True, null=True, default=None, max_length=100, verbose_name="縣市")
     district = models.CharField(blank=True, null=True, default=None, max_length=100, verbose_name="鄉鎮區")
-    market = models.CharField(default=None, max_length=10, verbose_name="市場別")
+    market = models.CharField(default=None, max_length=100, verbose_name="市場別")
 
     def __str__(self):
         return self.stock_id + ' ' + str(self.short_name)
 
     @property
     def stock_issued_num(self):
-        return round(self.capital / 10000)
+        return round(self.capital / 5000)
 
     stock_issued_num.fget.short_description = '發行股票張數'
 
@@ -95,7 +95,7 @@ class BrokerInfoTW(models.Model):
     stock_id = models.CharField(max_length=100, verbose_name="券商代號")
     broker_name = models.CharField(max_length=100, verbose_name="券商名稱")
     date_of_establishment = models.CharField(max_length=100, verbose_name="券商建立日")
-    address = models.CharField(max_length=100, verbose_name="券商地址")
+    address = models.CharField(max_length=500, verbose_name="券商地址")
     phone = models.CharField(max_length=100, verbose_name="市話")
     department = models.CharField(max_length=100, verbose_name="券商部門")
     longitude = models.FloatField(blank=True, null=True, verbose_name="經度")
@@ -149,6 +149,7 @@ class StockTiiMarketReportTW(models.Model):
     buy_price = models.FloatField(blank=True, null=True, verbose_name="買進金額")
     sell_price = models.FloatField(blank=True, null=True, verbose_name="賣出金額")
     net = models.FloatField(blank=True, null=True, verbose_name="買賣超金額")
+    market = models.CharField(default=None, max_length=100, verbose_name="市場別")
 
 
 class StockTdccTW(models.Model):
@@ -177,6 +178,50 @@ class StockMarginTransactionsTW(models.Model):
     ss_balance_now = models.FloatField(blank=True, null=True, verbose_name="今日融券餘額")
     ss_quota = models.FloatField(blank=True, null=True, verbose_name="券限額")
     offset = models.FloatField(blank=True, null=True, verbose_name="資券相抵")
-    note = models.CharField(blank=True, null=True, max_length=100, verbose_name="官方註記")
+    note = models.CharField(blank=True, null=True, max_length=500, verbose_name="官方註記")
     mt_use_rate = models.FloatField(blank=True, null=True, verbose_name="融資使用率")
     ss_use_rate = models.FloatField(blank=True, null=True, verbose_name="融券使用率")
+
+
+class Stock3PRatioTW(models.Model):
+    stock_id = models.CharField(max_length=100, verbose_name="證券代號")
+    date = models.DateField(verbose_name="資料日期")
+    stock_name = models.CharField(max_length=100, null=True, verbose_name="證券名稱")
+    dividend_yield = models.FloatField(blank=True, null=True, verbose_name="殖利率")
+    pe = models.FloatField(blank=True, null=True, verbose_name="本益比")
+    pb = models.FloatField(blank=True, null=True, verbose_name="本淨比")
+
+
+class CommodityTaifex(models.Model):
+    stock_id = models.CharField(max_length=100, verbose_name="商品代號")
+    spot_id = models.CharField(max_length=100, null=True, verbose_name="現貨代號")
+    stock_name = models.CharField(max_length=100, verbose_name="商品名稱")
+    check_fc = models.BooleanField(default=False, verbose_name="期貨商品")
+    check_opt = models.BooleanField(default=False, verbose_name="選擇權商品")
+    check_sii = models.BooleanField(default=False, verbose_name="上市商品")
+    check_otc = models.BooleanField(default=False, verbose_name="上櫃商品")
+    check_etf = models.BooleanField(default=False, verbose_name="ETF商品")
+    spot_unit = models.FloatField(blank=True, null=True, verbose_name="契約現貨單位")
+    company_info = models.ForeignKey("CompanyBasicInfoTW", blank=True, null=True, on_delete=models.SET_NULL,
+                                     db_constraint=False, verbose_name="公司資訊")
+
+
+class FuturePriceTW(models.Model):
+    stock_id = models.CharField(max_length=100, verbose_name="商品代號")
+    date = models.DateField(verbose_name="資料日期")
+    contract_date = models.CharField(max_length=100, null=True, verbose_name="契約日期")
+    open = models.FloatField(blank=True, null=True, verbose_name="開盤價")
+    high = models.FloatField(blank=True, null=True, verbose_name="最高價")
+    low = models.FloatField(blank=True, null=True, verbose_name="最低價")
+    close = models.FloatField(blank=True, null=True, verbose_name="收盤價")
+    quote_change = models.FloatField(blank=True, null=True, verbose_name="漲跌幅")
+    turnover_vol = models.FloatField(blank=True, null=True, verbose_name="成交量")
+    settlement_price = models.FloatField(blank=True, null=True, verbose_name="結算價")
+    open_interest = models.FloatField(blank=True, null=True, verbose_name="未沖銷契約數")
+    best_bid = models.FloatField(blank=True, null=True, verbose_name="最後最佳買價")
+    best_ask = models.FloatField(blank=True, null=True, verbose_name="最後最佳賣價")
+    trading_halt = models.CharField(max_length=100, null=True, verbose_name="暫停交易")
+    trading_session = models.CharField(max_length=100, null=True, verbose_name="交易時段")
+    cross_contract_vol = models.FloatField(blank=True, null=True, verbose_name="價差對單式委託成交量")
+    commodity_info = models.ForeignKey("CommodityTaifex", blank=True, null=True, on_delete=models.SET_NULL,
+                                       db_constraint=False, verbose_name="公司資訊")

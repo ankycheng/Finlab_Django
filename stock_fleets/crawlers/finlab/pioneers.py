@@ -1,11 +1,13 @@
 import pandas as pd
+import swifter
 from io import StringIO
 import requests
 import datetime
 from crawlers.finlab.data_process_tools import *
-from crawlers.finlab.import_tools import AddToSQL
+from crawlers.finlab.import_tools import engine, table_latest_date, AddToSQL
 from crawlers.models import CompanyBasicInfoTW, BrokerInfoTW, BrokerTradeTW
 from django.core.exceptions import ObjectDoesNotExist
+import time
 
 
 class CrawlStockPriceTW:
@@ -28,8 +30,8 @@ class CrawlStockPriceTW:
         df = df.astype(str)
         df = df.apply(lambda s: s.str.replace(",", ""))
         df.iloc[:, 2:] = df.iloc[:, 2:].apply(lambda s: pd.to_numeric(s, errors="coerce"))
-        df["date"] = pd.to_datetime(self.date).date()
-        df = df.loc[:, ["證券代號", "date", "證券名稱", "成交股數", "成交金額", "開盤價", "收盤價", "最高價", "最低價"]]
+        df["date"] = self.date.date()
+        df = df[["證券代號", "date", "證券名稱", "成交股數", "成交金額", "開盤價", "收盤價", "最高價", "最低價"]]
         df = df.rename(columns={"證券代號": "stock_id", "證券名稱": "stock_name",
                                 "成交股數": "turnover_vol", "成交金額": "turnover_price",
                                 "開盤價": "open_price", "收盤價": "close_price",
@@ -45,7 +47,7 @@ class CrawlStockPriceTW:
                 return False
             else:
                 try:
-                    code = int(code)
+                    code = int(code[:5])
                     if code > 10000:
                         return False
                     else:
@@ -72,8 +74,8 @@ class CrawlStockPriceTW:
         df["stock_id"] = df["代號"]
         df["代號"] = df["代號"].apply(lambda s: self.select_otc_id(s))
         df = df[df["代號"]]
-        df["date"] = pd.to_datetime(self.date).date()
-        df = df.loc[:, ["stock_id", "date", "名稱", "成交股數", "成交金額(元)", "開盤", "收盤", "最高", "最低"]]
+        df["date"] = self.date.date()
+        df = df[["stock_id", "date", "名稱", "成交股數", "成交金額(元)", "開盤", "收盤", "最高", "最低"]]
         df = df.rename(columns={"名稱": "stock_name",
                                 "成交股數": "turnover_vol", "成交金額(元)": "turnover_price",
                                 "開盤": "open_price", "收盤": "close_price",
@@ -102,12 +104,12 @@ class CrawlStockPriceTW:
         df = df.astype(str)
         df = df.apply(lambda s: s.str.replace(",", ""))
         df.iloc[:, 3:] = df.iloc[:, 3:].apply(lambda s: pd.to_numeric(s, errors="coerce"))
-        df["date"] = pd.to_datetime(self.date).date()
+        df["date"] = self.date.date()
         if "證券名稱" in df.columns:
-            df = df.loc[:, ["證券代號", "date", "證券名稱", "成交量", "成交金額", "前日均價", "最後", "最高", "最低"]]
+            df = df[["證券代號", "date", "證券名稱", "成交量", "成交金額", "前日均價", "最後", "最高", "最低"]]
         # old format("名稱")
         else:
-            df = df.loc[:, ["證券代號", "date", "名稱", "成交量", "成交金額", "前日均價", "最後", "最高", "最低"]]
+            df = df[["證券代號", "date", "名稱", "成交量", "成交金額", "前日均價", "最後", "最高", "最低"]]
             df = df.rename(columns={"名稱": "證券名稱"})
 
         df = df.rename(columns={"證券代號": "stock_id", "證券名稱": "stock_name",
@@ -217,11 +219,11 @@ class CrawlCompanyBasicInfoTW:
         df2 = pd.concat(data, sort=False)
         df2 = df2.astype(str)
         df2 = df2.apply(lambda s: s.str.replace(",", ""))
-        df3 = df2.loc[:, ["公司代號", "update_time", "公司名稱", "公司簡稱", "產業類別", "外國企業註冊地國", "住址",
-                          "董事長", "總經理", "發言人", "發言人職稱", "總機電話",
-                          "成立日期", "上市日期", "上櫃日期", "興櫃日期", "實收資本額(元)", "已發行普通股數或TDR原發行股數",
-                          "私募普通股(股)", "特別股(股)", "普通股盈餘分派或虧損撥補頻率", "股票過戶機構", "簽證會計師事務所",
-                          "公司網址", "投資人關係聯絡電話", "投資人關係聯絡電子郵件", "英文簡稱", "market"]]
+        df3 = df2[["公司代號", "公司名稱", "公司簡稱", "產業類別", "外國企業註冊地國", "住址",
+                   "董事長", "總經理", "發言人", "發言人職稱", "總機電話",
+                   "成立日期", "上市日期", "上櫃日期", "興櫃日期", "實收資本額(元)", "已發行普通股數或TDR原發行股數",
+                   "私募普通股(股)", "特別股(股)", "普通股盈餘分派或虧損撥補頻率", "股票過戶機構", "簽證會計師事務所",
+                   "公司網址", "投資人關係聯絡電話", "投資人關係聯絡電子郵件", "英文簡稱", "market"]]
         df3 = df3.rename(columns={
             "公司代號": "stock_id", "公司名稱": "name",
             "公司簡稱": "short_name", "產業類別": "category",
@@ -261,9 +263,11 @@ class CrawlStockIndexPriceTW:
         self.sub_market = ["sii", "otc"]
         self.format = "time_series"
 
-    def sii_index(self):
+    def crawl_sii(self):
+
         r = requests.post(
             'http://www.twse.com.tw/exchangeReport/MI_INDEX?response=csv&date=' + self.date_str + '&type=IND')
+
         content = r.text.replace('=', '')
         lines = content.split('\n')
         lines = list(filter(lambda l: len(l.split('",')) > 5, lines))
@@ -277,20 +281,22 @@ class CrawlStockIndexPriceTW:
                                 '漲跌百分比(%)': 'quote_change'})
         df['date'] = pd.to_datetime(self.date).date()
         df['stock_id'] = df['stock_id'].apply(lambda s: '上市' + s)
-        df.loc[:, ['index_price', 'quote_change']] = df.loc[:, ['index_price', 'quote_change']].apply(
+        df[['index_price', 'quote_change']] = df[['index_price', 'quote_change']].apply(
             lambda s: pd.to_numeric(s, errors='coerce'))
 
         df_all = df.loc[:, ['stock_id', 'date', 'index_price', 'quote_change']]
         df_all = df_all.dropna()
+
         return df_all
 
-    def otc_index(self):
+    def crawl_otc(self):
 
         y = str(int(self.date.strftime("%Y")) - 1911)
         date_str = y + "/" + self.date.strftime("%m") + "/" + self.date.strftime("%d")
-        link = 'http://www.tpex.org.tw/web/stock/aftertrading/index_summary/summary_download.php?l=zh-tw&d=' + \
-               date_str + '&s=0,asc,0'
+        link = 'http://www.tpex.org.tw/web/stock/aftertrading/index_summary/summary_download.php?l=zh-tw&d=' \
+               + date_str + '&s=0,asc,0'
         r = requests.get(link)
+
         lines = r.text.replace("\r", "").split("\n")
         try:
             df = pd.read_csv(StringIO("\n".join(lines[3:])), header=None)
@@ -298,18 +304,23 @@ class CrawlStockIndexPriceTW:
             return None
         df.columns = list(map(lambda s: s.replace(" ", ""), lines[2].split(",")))
         df = df.apply(lambda s: s.str.replace(",", ""))
+
         df['stock_id'] = '上櫃' + (df['指數'].apply(lambda s: s.replace('指數', ''))) + '指數'
+
         # 第二個櫃買指數以下的才是報酬指數，找出第二個，各年指數項目不同使用find來定位
         rem_loc = df['指數'].str.find('櫃買指數')
         rem_loc = (rem_loc[rem_loc > -1].index.tolist())[-1]
+
         # 一般指數
         df_normal = df.iloc[:rem_loc]
         # 報酬指數
-        df_rem = df.iloc[rem_loc:]
-        # 合併
+        df_rem = df.copy()
+        df_rem = df_rem.iloc[rem_loc:]
+        df_rem['stock_id'] = df_rem['stock_id'].apply(lambda s: s.replace('指數', '報酬指數'))
+        #         合併
         df_all = pd.concat([df_normal, df_rem])
         df_all = df_all.rename(columns={'收市指數': 'index_price', '漲跌幅度': 'quote_change'})
-        df_all.loc[:, ['index_price', 'quote_change']] = df_all.loc[:, ['index_price', 'quote_change']].apply(
+        df_all[['index_price', 'quote_change']] = df_all[['index_price', 'quote_change']].apply(
             lambda s: pd.to_numeric(s, errors='coerce'))
         df_all['date'] = pd.to_datetime(self.date).date()
         df_all = df_all.loc[:, ['stock_id', 'date', 'index_price', 'quote_change']]
@@ -318,7 +329,7 @@ class CrawlStockIndexPriceTW:
 
     def crawl_main(self):
         try:
-            df = pd.concat([self.sii_index(), self.otc_index()], sort=False)
+            df = pd.concat([self.crawl_sii(), self.crawl_otc()])
         except ValueError:
             return None
         return df
@@ -345,9 +356,9 @@ class CrawlStockIndexVolTW:
         df = df.apply(lambda s: s.str.replace(',', ''))
         df = df.rename(
             columns={'分類指數名稱': 'stock_id', '成交股數': 'turnover_vol', '成交金額': 'turnover_price', '成交筆數': 'turnover_num'})
-        df['date'] = pd.to_datetime(self.date).date()
-        df.loc[:, ['turnover_vol', 'turnover_price', 'turnover_num']] = df.loc[:, ['turnover_vol', 'turnover_price',
-                                                                                   'turnover_num']].apply(
+        df['date'] = self.date.date()
+        df[['turnover_vol', 'turnover_price', 'turnover_num']] = df[['turnover_vol', 'turnover_price',
+                                                                     'turnover_num']].apply(
             lambda s: pd.to_numeric(s, errors='coerce'))
         df = df.drop(columns=['漲跌指數', 'Unnamed: 5'])
         df['stock_id'] = df['stock_id'].apply(lambda s: '上市' + s)
@@ -369,7 +380,7 @@ class CrawlStockIndexVolTW:
         df = df.rename(columns={'成交統計': 'stock_id', '成交金額(元)': 'turnover_price',
                                 '成交股數(股)': 'turnover_vol', '成交筆數': 'turnover_num'})
         df = df.drop(columns={'Unnamed: 4'})
-        df['date'] = pd.to_datetime(self.date).date()
+        df['date'] = self.date.date()
         df.iloc[:, 1:4] = df.iloc[:, 1:4].apply(lambda s: pd.to_numeric(s, errors='coerce'))
         df = df.dropna()
         df['stock_id'] = df['stock_id'].apply(lambda s: '上市' + s[s.index(".") + 1:] if "." in s else '上市' + s)
@@ -391,8 +402,8 @@ class CrawlStockIndexVolTW:
         df = df.apply(lambda s: s.str.replace(',', ''))
         df = df.rename(columns={'成交統計': 'stock_id', '成交金額(元)': 'turnover_price',
                                 '成交股數(股)': 'turnover_vol', '成交筆數': 'turnover_num'})
-        df = df.loc[:, ['stock_id', 'turnover_vol', 'turnover_price', 'turnover_num']]
-        df['date'] = pd.to_datetime(self.date).date()
+        df = df[['stock_id', 'turnover_vol', 'turnover_price', 'turnover_num']]
+        df['date'] = self.date.date()
         df.iloc[:, 1:4] = df.iloc[:, 1:4].apply(lambda s: pd.to_numeric(s, errors='coerce'))
         df = df.dropna()
         df['stock_id'] = df['stock_id'].apply(lambda s: '上櫃' + s[s.index(".") + 1:] if "." in s else '上櫃' + s)
@@ -529,7 +540,7 @@ class CrawlBrokerTradeTW:
     def check_trade_day(self):
         stock_range = CrawlStockPriceTW(self.start_date)
         try:
-            df = pd.concat([stock_range.crawl_sii(), stock_range.crawl_otc()])['stock_id'].values
+            df = list(pd.concat([stock_range.crawl_sii(), stock_range.crawl_otc()])['stock_id'].values)
             return df
         except ValueError:
             return None
@@ -560,20 +571,29 @@ class CrawlBrokerTradeTW:
         df_all.iloc[:, 1:] = df_all.iloc[:, 1:].apply(lambda s: pd.to_numeric(s.str.replace('%', ''), errors="coerce"))
         df_all['net_bs'] = df_all['buy_num'] - df_all['sell_num']
         df_all['net_bs_cost'] = [i * buy_net_avg_cost if i > 0 else i * sell_net_avg_cost for i in df_all['net_bs']]
-        df_all['date'] = pd.to_datetime(self.start_date).date()
+        df_all['date'] = self.start_date.date()
         df_all['broker_name'] = df_all['broker_name'].apply(lambda s: s.replace('證券', '')).apply(
             lambda s: s.replace('(牛牛牛)', '犇'))
-        df_all['broker_name'] = df_all['broker_name'].apply(lambda s: s if '停' not in s else s[:s.index('-')])
         df_all['stock_id'] = str(stock_id)
         AddToSQL.add_to_sql(BrokerTradeTW, df_all, ['stock_id', 'date', 'broker_name'],
-                            [{'broker_name': 'broker_name'}, {'stock_id': 'stock_id'}])
+                            [{'broker_name': 'broker_name'}, {'stock_id': 'stock_id'}],
+                            jump_update=True)
         return df_all
 
     def crawl_main(self):
         crawl_list = self.check_trade_day()
+        # check holiday
         if crawl_list is not None:
-            for stock_id in crawl_list[:5]:
+            # check is new or old process
+            new_obj = BrokerTradeTW.objects.filter(date=self.start_date_str)
+            if len(new_obj) > 0:
+                table_last_day = table_latest_date(engine, BrokerTradeTW._meta.db_table)
+                finish_obj = BrokerTradeTW.objects.filter(date=table_last_day)
+                last_stock_id = finish_obj[len(finish_obj) - 1].stock_id
+                crawl_list = crawl_list[crawl_list.index(last_stock_id) + 1:]
+            for stock_id in crawl_list:
                 self.broker_trade(stock_id)
+                # time.sleep(0.5)
         else:
             pass
 
@@ -606,55 +626,78 @@ class CrawlStockTiiTW:
                                 '三大法人買賣超股數': 'tii_net'
                                 })
         df['ft_net'] = df['fm_net'] + df['fd_net']
-        df["date"] = pd.to_datetime(self.date).date()
+        df["date"] = self.date.date()
         return df
 
     def crawl_otc(self):
-        y = str(int(self.date.strftime("%Y")) - 1911)
+        west_year = int(self.date.strftime("%Y"))
+        y = str(west_year - 1911)
         date_str = y + "/" + self.date.strftime("%m") + "/" + self.date.strftime("%d")
         r = requests.get(
-            'http://www.tpex.org.tw/web/stock/3insti/daily_trade/3itrade_hedge_result.php?l=zh-tw&o=csv&se=EW&t=D&d=' +
-            date_str + '&s=0,asc')
+            'http://www.tpex.org.tw/web/stock/3insti/daily_trade/3itrade_hedge_result.php?l=zh-tw&o=csv&se=EW&t=D&d='
+            + date_str + '&s=0,asc')
         try:
             df = pd.read_csv(StringIO(r.text), header=1).dropna(how='all', axis=1).dropna(how='any')
         except pd.errors.ParserError:
             return None
-        df = df.astype(str).apply(lambda s: s.str.replace(',', '').replace(' ', ''))
+        df = df.astype(str).apply(lambda s: s.str.replace(',', ''))
         df['代號'] = df['代號'].str.replace('=', '').str.replace('"', '')
         df.iloc[:, 2:] = df.iloc[:, 2:].apply(lambda s: pd.to_numeric(s, errors='coerce')).dropna(how='all', axis=1)
-        df = df.rename(columns={'代號': 'stock_id', '名稱': 'stock_name',
-                                '外資及陸資(不含外資自營商)-買進股數': 'fm_buy', '外資及陸資(不含外資自營商)-賣出股數': 'fm_sell',
-                                '外資及陸資(不含外資自營商)-買賣超股數': 'fm_net', '外資自營商-買進股數': 'fd_buy',
-                                '外資自營商-賣出股數': 'fd_sell', '外資自營商-買賣超股數': 'fd_net',
-                                '投信-買進股數': 'itc_buy', '投信-賣出股數': 'itc_sell',
-                                '投信-買賣超股數': 'itc_net', '自營商-買賣超股數': 'dealer_net',
-                                '自營商(自行買賣)-買進股數': 'dealer_ppt_buy', '自營商(自行買賣)-賣出股數': 'dealer_ppt_sell',
-                                '自營商(自行買賣)-買賣超股數': 'dealer_ppt_net', '自營商(避險)-買進股數': 'dealer_hedge_buy',
-                                '自營商(避險)-賣出股數': 'dealer_hedge_sell', '自營商(避險)-買賣超股數': 'dealer_hedge_net',
-                                '三大法人買賣超股數合計': 'tii_net'
-                                })
-        df['ft_net'] = df['fm_net'] + df['fd_net']
-        df = df.drop(columns=['外資及陸資-買進股數', '外資及陸資-賣出股數', '外資及陸資-買賣超股數', '自營商-買進股數', '自營商-賣出股數'])
-        df["date"] = pd.to_datetime(self.date).date()
+
+        if self.date > datetime.datetime(2018, 1, 14):
+            df = df.rename(columns={'代號': 'stock_id', '名稱': 'stock_name',
+                                    '外資及陸資(不含外資自營商)-買進股數': 'fm_buy', '外資及陸資(不含外資自營商)-賣出股數': 'fm_sell',
+                                    '外資及陸資(不含外資自營商)-買賣超股數': 'fm_net', '外資自營商-買進股數': 'fd_buy',
+                                    '外資自營商-賣出股數': 'fd_sell', '外資自營商-買賣超股數': 'fd_net',
+                                    '投信-買進股數': 'itc_buy', '投信-賣出股數': 'itc_sell',
+                                    '投信-買賣超股數': 'itc_net', '自營商-買賣超股數': 'dealer_net',
+                                    '自營商(自行買賣)-買進股數': 'dealer_ppt_buy', '自營商(自行買賣)-賣出股數': 'dealer_ppt_sell',
+                                    '自營商(自行買賣)-買賣超股數': 'dealer_ppt_net', '自營商(避險)-買進股數': 'dealer_hedge_buy',
+                                    '自營商(避險)-賣出股數': 'dealer_hedge_sell', '自營商(避險)-買賣超股數': 'dealer_hedge_net',
+                                    '三大法人買賣超股數合計': 'tii_net'
+                                    })
+            df['ft_net'] = df['fm_net'] + df['fd_net']
+            df = df.drop(columns=['外資及陸資-買進股數', '外資及陸資-賣出股數', '外資及陸資-買賣超股數', '自營商-買進股數', '自營商-賣出股數'])
+
+        else:
+            df = df.rename(columns={'代號': 'stock_id', '名稱': 'stock_name',
+                                    '外資及陸資買股數': 'fm_buy', '外資及陸資賣股數': 'fm_sell',
+                                    '外資及陸資淨買股數': 'fm_net',
+                                    '投信買進股數': 'itc_buy', '投信賣股數': 'itc_sell',
+                                    '投信淨買股數': 'itc_net', '自營淨買股數': 'dealer_net',
+                                    '自營商(自行買賣)買股數': 'dealer_ppt_buy', '自營商(自行買賣)賣股數': 'dealer_ppt_sell',
+                                    '自營商(自行買賣)淨買股數': 'dealer_ppt_net', '自營商(避險)買股數': 'dealer_hedge_buy',
+                                    '自營商(避險)賣股數': 'dealer_hedge_sell', '自營商(避險)淨買股數': 'dealer_hedge_net',
+                                    '三大法人買賣超股數': 'tii_net'
+                                    })
+            df['ft_net'] = df['fm_net']
+        df["date"] = self.date.date()
         return df
 
     def crawl_rotc(self):
         r = requests.get(
-            'https://www.tpex.org.tw/web/emergingstock/historical/daily/EMDaily_dl.php?l=zh-tw&f=EMdss006.' + self.
-            date_str + '-C.csv')
+            'https://www.tpex.org.tw/web/emergingstock/historical/daily/EMDaily_dl.php?l=zh-tw&f=EMdss006.'
+            + self.date_str + '-C.csv')
         try:
             df = pd.read_csv(StringIO(r.text), header=3).dropna(how='all', axis=1).dropna(how='any')
         except pd.errors.ParserError:
             return None
         df = df.drop(columns=['HEADER'])
         df = df.astype(str).apply(lambda s: s.str.replace(',', ''))
-        df['證券代號'] = df['證券代號'].apply(lambda s: s[:4])
+        try:
+            df['證券代號'] = df['證券代號'].apply(lambda s: s[:4])
+            df = df.rename(columns={'證券代號': 'stock_id', '證券名稱': 'stock_name',
+                                    '外資(股數)': 'ft_net', '投信(股數)': 'itc_net',
+                                    '自營商(股數)': 'dealer_net', '合計買賣超(股數)': 'tii_net',
+                                    })
+        except KeyError:
+            df['股票代號'] = df['股票代號'].apply(lambda s: s[:4])
+            df = df.rename(columns={'股票代號': 'stock_id', '名稱': 'stock_name',
+                                    '外資': 'ft_net', '投信': 'itc_net',
+                                    '自營商': 'dealer_net', '合計買賣超': 'tii_net',
+                                    })
         df.iloc[:, 2:] = df.iloc[:, 2:].apply(lambda s: pd.to_numeric(s, errors='coerce')).dropna(how='all', axis=1)
-        df = df.rename(columns={'證券代號': 'stock_id', '證券名稱': 'stock_name',
-                                '外資(股數)': 'ft_net', '投信(股數)': 'itc_net',
-                                '自營商(股數)': 'dealer_net', '合計買賣超(股數)': 'tii_net',
-                                })
-        df["date"] = pd.to_datetime(self.date).date()
+        df["date"] = self.date.date()
         df['stock_id'] = df['stock_id'].apply(lambda s: s[:s.index(' ')] if '" "' in s else s)
         df['stock_name'] = df['stock_name'].apply(lambda s: s[:s.index(' ')] if '" "' in s else s)
         return df
@@ -683,43 +726,40 @@ class CrawlStockTiiMarketReportTW:
             return None
         df = df.astype(str).apply(lambda s: s.str.replace(',', ''))
         df.iloc[:, 1:] = df.iloc[:, 1:].apply(lambda s: pd.to_numeric(s, errors='coerce')).dropna(how='all', axis=1)
+
         df = df.rename(
             columns={'單位名稱': 'stock_id', '買進金額': 'buy_price',
                      '賣出金額': 'sell_price', '買賣差額': 'net'})
         df = df.set_index(['stock_id'])
-        df = df.rename(index={
-            '自營商(自行買賣)': '上市自營商_自行買賣', '自營商(避險)': '上市自營商_避險',
-            '投信': '上市投信', '外資及陸資(不含外資自營商)': '上市外資及陸資_不含外資自營商',
-            '外資自營商': '上市外資自營商', '合計': '上市三大法人合計'})
-        df = df.T
-        df['上市外資及陸資合計'] = df['上市外資及陸資_不含外資自營商'] + df['上市外資自營商']
-        df = df.T.reset_index()
-        df["date"] = pd.to_datetime(self.date).date()
+
+        df = df.reset_index()
+        df["date"] = self.date.date()
+        df['market'] = '上市'
         return df
 
     def crawl_otc(self):
         y = str(int(self.date.strftime("%Y")) - 1911)
         date_str = y + "/" + self.date.strftime("%m") + "/" + self.date.strftime("%d")
         r = requests.get(
-            'http://www.tpex.org.tw/web/stock/3insti/3insti_summary/3itrdsum_result.php?l=zh-tw&o=csv&se=EW&t=D&d=' +
-            date_str + '&s=0,asc')
+            'http://www.tpex.org.tw/web/stock/3insti/3insti_summary/3itrdsum_result.php?l=zh-tw&o=csv&se=EW&t=D&p=0&d='
+            + date_str + '&s=0,asc')
         try:
-            df = pd.read_csv(StringIO(r.text), header=1).dropna(how='all', axis=1).dropna(how='any')
+            df = pd.read_csv(StringIO(r.text), header=1)
         except pd.errors.ParserError:
             return None
-        df = df.astype(str).apply(lambda s: s.str.replace(',', ''))
+        if len(df) < 3:
+            return None
+        df = df.astype(str).apply(lambda s: s.str.replace(',', '').str.replace('', ''))
         df.iloc[:, 1:] = df.iloc[:, 1:].apply(lambda s: pd.to_numeric(s, errors='coerce')).dropna(how='all', axis=1)
         df = df.rename(
             columns={'單位名稱': 'stock_id', '買進金額(元)': 'buy_price',
                      '賣出金額(元)': 'sell_price', '買賣超(元)': 'net'})
-        df["date"] = pd.to_datetime(self.date).date()
+        df["date"] = self.date.date()
+        df['stock_id'] = [col.replace('\u3000', '') for col in df['stock_id']]
         df = df.set_index(['stock_id'])
-        df = df.rename(index={'　外資及陸資(不含自營商)': '  上櫃外資及陸資＿不含自營商', '　外資自營商': '上櫃外資自營商',
-                              '　自營商(自行買賣)': '上櫃自營商_自行買賣', '　自營商(避險)': '自營商_避險',
-                              '三大法人合計*': '上櫃三大法人合計', '外資及陸資合計': '上櫃外資及陸資合計',
-                              '投信': '上櫃投信', '自營商合計': '上櫃自營商合計'
-                              })
         df = df.reset_index()
+        df['market'] = '上櫃'
+        df = df.dropna(thresh=4)
         return df
 
     def crawl_main(self):
@@ -750,6 +790,8 @@ class CrawlStockTdccTW:
             '證券代號': 'stock_id', '持股分級': 'hold_class',
             '人數': 'people', '股數': 'hold_num', '占集保庫存數比例%': 'hold_pt'
         })
+        if 'hold_pt' not in df.columns:
+            df = df.rename(columns={'佔集保庫存數比例%': 'hold_pt'})
         df = df[df['hold_class'] != '16']
         df.iloc[:, 2:6] = df.iloc[:, 2:6].apply(lambda s: pd.to_numeric(s, errors="coerce"))
         df['date'] = df[df.columns[0]].apply(lambda s: datetime.datetime.strptime(s, '%Y%m%d'))
@@ -796,7 +838,7 @@ class CrawlStockMarginTransactionsTW:
                              zip(df['mt_balance_now'], df['mt_quota'])]
         df['ss_use_rate'] = [round(v / q * 100, 2) if q > 0 else 100 if v > 0 else 0 for v, q in
                              zip(df['ss_balance_now'], df['ss_quota'])]
-        df['date'] = pd.to_datetime(self.date).date()
+        df['date'] = self.date.date()
         return df
 
     def crawl_otc(self):
@@ -825,12 +867,65 @@ class CrawlStockMarginTransactionsTW:
         df['note'] = [symbols_change(i, {'O': '停止融資', 'X': '停止融券', '@': '融資分配', '%': '融券分配', '!': '停止買賣',
                                          '*': '融券餘額占融資餘額百分之六十以上者', 'A': '股價波動過度劇烈', 'B': '股權過度集中',
                                          'C': '成交量過度異常', 'D': '監視第二次處置'}) for i in df['note']]
-        df['date'] = pd.to_datetime(self.date).date()
+        df['date'] = self.date.date()
         return df
 
     def crawl_main(self):
         try:
             df = pd.concat([self.crawl_sii(), self.crawl_otc()], sort=False)
+        except ValueError:
+            return None
+        return df
+
+
+class CrawlStock3PRatioTW:
+    def __init__(self, date):
+        self.date = date
+        self.date_str = date.strftime("%Y%m%d")
+        self.target_name = "台股3p數據"
+        self.sub_market = ["sii", "otc"]
+
+    def crawl_sii(self):
+        r = requests.get(
+            'http://www.twse.com.tw/exchangeReport/BWIBBU_d?response=csv&date=' + self.date_str + '&selectType=ALL')
+        content = r.text.replace('=', '')
+        lines = content.split('\n')
+        lines = list(filter(lambda l: len(l.split('",')) > 5, lines))
+        content = "\n".join(lines[:])
+        if content == '':
+            return None
+        df = pd.read_csv(StringIO(content), header=0).dropna(how='all', axis=1)
+        df = df.astype(str)
+        df = df.apply(lambda s: s.str.replace(',', ''))
+        df = df.drop(columns=['財報年/季', '股利年度'])
+        df.iloc[:, 2:] = df.iloc[:, 2:].apply(lambda s: pd.to_numeric(s, errors='coerce'))
+        df = df.rename(
+            columns={k: v for k, v in zip(df.columns, ['stock_id', 'stock_name', 'dividend_yield', 'pe', 'pb'])})
+        df['date'] = self.date
+        return df
+
+    def crawl_otc(self):
+        y = str(int(self.date.strftime("%Y")) - 1911)
+        date_str = y + "/" + self.date.strftime("%m") + "/" + self.date.strftime("%d")
+        link = 'https://www.tpex.org.tw/web/stock/aftertrading/peratio_analysis/pera_download.php?l=zh-tw&d=' \
+               + date_str + '&s=0,asc,0'
+        r = requests.get(link)
+        lines = r.text.replace('\r', '').split('\n')
+        if len(lines) < 10:
+            return None
+        df = pd.read_csv(StringIO("\n".join(lines[3:-1])), header=0)
+        df = df.astype(str)
+        df = df.apply(lambda s: s.str.replace(',', ''))
+        df = df.drop(columns=['每股股利', '股利年度'])
+        df = df.rename(
+            columns={k: v for k, v in zip(df.columns, ['stock_id', 'stock_name', 'pe', 'dividend_yield', 'pb'])})
+        df.iloc[:, 2:] = df.iloc[:, 2:].apply(lambda s: pd.to_numeric(s, errors='coerce'))
+        df['date'] = self.date
+        return df
+
+    def crawl_main(self):
+        try:
+            df = pd.concat([self.crawl_sii(), self.crawl_otc()])
         except ValueError:
             return None
         return df

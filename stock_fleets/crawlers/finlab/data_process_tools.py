@@ -1,6 +1,7 @@
 import datetime
 import requests
 import pandas as pd
+import swifter
 from io import StringIO
 
 """""
@@ -52,7 +53,9 @@ def char_filter(target, *trash_key):
 """""
 
 
-def symbols_change(word, target={}):
+def symbols_change(word, target=None):
+    if target is None:
+        target = {}
     if len(word) > 0:
         for sym, value in target.items():
             if sym in word:

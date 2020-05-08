@@ -110,3 +110,7 @@ USE_TZ = False
 # https://docs.djangoproject.com/en/2.2/howto/static-files/
 
 STATIC_URL = '/static/'
+# django 3.0 new items
+os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
+# modin_pandas_engine
+os.environ["MODIN_ENGINE"] = "ray"

@@ -2,6 +2,7 @@ import datetime
 import time
 import os
 import pandas as pd
+import swifter
 from dateutil.rrule import rrule, DAILY, MONTHLY
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.conf import settings
@@ -32,18 +33,18 @@ date generator
 
 
 def date_range(start_date, end_date):
-    return [dt.date() for dt in rrule(DAILY, dtstart=start_date, until=end_date)]
+    return [dt for dt in rrule(DAILY, dtstart=start_date, until=end_date)]
 
 
 def month_range(start_date, end_date):
-    return [dt.date() for dt in rrule(MONTHLY, dtstart=start_date, until=end_date)]
+    return [dt for dt in rrule(MONTHLY, dtstart=start_date, until=end_date)]
 
 
 def season_range(start_date, end_date):
     if isinstance(start_date, datetime.datetime):
-        start_date = start_date.date()
+        start_date = start_date
     if isinstance(end_date, datetime.datetime):
-        end_date = end_date.date()
+        end_date = end_date
     ret = []
     for year in range(start_date.year - 1, end_date.year + 1):
         ret += [datetime.date(year, 5, 15),
@@ -51,7 +52,6 @@ def season_range(start_date, end_date):
                 datetime.date(year, 11, 14),
                 datetime.date(year + 1, 3, 31)]
     ret = [r for r in ret if start_date < r < end_date]
-
     return ret
 
 
@@ -139,11 +139,11 @@ class AddToSQL:
         if pk_columns is None:
             pk_columns = ['stock_id', 'date']
         get_pk_dict = {pk: df[pk] for pk in pk_columns}
-        get_pk_contain_dict = {pk + '__contain': df[pk] for pk in pk_columns}
+        get_pk_contain_dict = {pk + '__contains': df[pk] for pk in pk_columns}
         return [get_pk_dict, get_pk_contain_dict]
 
     @classmethod
-    def add_to_sql(cls, model_name, df, pk_columns=None, fk_columns=None):
+    def add_to_sql(cls, model_name, df, pk_columns=None, fk_columns=None, jump_update=False):
         df = df.where(pd.notnull(df), None)
         columns_list = list(df.columns.values)
         bulk_update_data = []
@@ -173,32 +173,34 @@ class AddToSQL:
                     print(f"error{' '}{e}{' '}Stock_id:{item['stock_id']}")
                     pass
         else:
-            # Change CSV to iterrow
             for index, item in df.iterrows():
-                # Use bulk_update to update obj,PS:must include primekey column
-                try:
-                    pk_filter = cls.pk_select(item, pk_columns)
+                # Use bulk_update to update obj,PS:must include primary key column
+                if jump_update is False:
                     try:
-                        obj_check = model_name.objects.get(**pk_filter[0])
-                    # 無法區分字母大小寫,回傳2個值
-                    except MultipleObjectsReturned:
-                        obj_check = model_name.objects.get(**pk_filter[1])
+                        pk_filter = cls.pk_select(item, pk_columns)
+                        try:
+                            obj_check = model_name.objects.get(**pk_filter[0])
+                        # 無法區分字母大小寫,回傳2個值
+                        except MultipleObjectsReturned:
+                            obj_check = model_name.objects.get(**pk_filter[1])
 
-                    attribute_data = columns_list
-                    update_data = [item[field] for field in columns_list]
-                    for attribute, update_value in zip(attribute_data, update_data):
-                        setattr(obj_check, attribute, update_value)
-                    # ForeignKey update
-                    if fk_columns is not None:
-                        for attribute, update_value in cls.fk_update(model_name, item, fk_columns):
+                        attribute_data = columns_list
+                        update_data = [item[field] for field in columns_list]
+                        for attribute, update_value in zip(attribute_data, update_data):
                             setattr(obj_check, attribute, update_value)
-                    bulk_update_data.append(obj_check)
-                # Use dict to bulk_create obj when get nothing ,process incomplete data
-                except ObjectDoesNotExist:
+                        # ForeignKey update
+                        if fk_columns is not None:
+                            for attribute, update_value in cls.fk_update(model_name, item, fk_columns):
+                                setattr(obj_check, attribute, update_value)
+                        bulk_update_data.append(obj_check)
+                    # Use dict to bulk_create obj when get nothing ,process incomplete data
+                    except ObjectDoesNotExist:
+                        bulk_create_func(model_name, columns_list)
+                    except Exception as e:
+                        print(f"error{' '}{e}{' '}Stock_id:{item['stock_id']}")
+                        pass
+                else:
                     bulk_create_func(model_name, columns_list)
-                except Exception as e:
-                    print(f"error{' '}{e}{' '}Stock_id:{item['stock_id']}")
-                    pass
         # Process bulk
         model_name.objects.bulk_create(bulk_create_data, batch_size=1000)
         if 'date' in columns_list:
@@ -223,28 +225,30 @@ fk_columns-外鍵對應過濾用欄位名
 
 
 class CrawlerProcess:
-    def __init__(self, crawl_class, crawl_method, model_name, range_date, nest=False, time_sleep=8, pk_columns=None,
-                 fk_columns=None):
+    def __init__(self, crawl_class, crawl_method, model_name, range_date, nest=False, time_sleep=4, pk_columns=None,
+                 fk_columns=None, jump_update=False):
         self.crawl_class = crawl_class
         self.crawl_method = crawl_method
         self.model_name = model_name
+        self.table_earliest_date = table_earliest_date(engine, self.model_name._meta.db_table)
         self.table_latest_date = table_latest_date(engine, self.model_name._meta.db_table)
         self.range_date = range_date
         self.nest = nest
         self.time_sleep = time_sleep
         self.pk_columns = pk_columns
         self.fk_columns = fk_columns
+        self.jump_update = jump_update
 
     def __repr__(self):
-        return str(self.model_name._meta.db_table) + ' ' + "table_latest_date:" + str(self.table_latest_date)
+        return str(self.model_name._meta.db_table) + ' ' + "\ntable_earliest_date:" + str(
+            self.table_earliest_date) + "\ntable_latest_date:" + str(self.table_latest_date)
 
     def crawl_process(self, date_list: list):
         for d in date_list:
             if self.nest is False:
                 df = getattr(self.crawl_class(d), self.crawl_method)()
                 try:
-                    ret = df.drop_duplicates(['stock_id', 'date'], keep='last')
-                    AddToSQL.add_to_sql(self.model_name, ret, self.pk_columns, self.fk_columns)
+                    AddToSQL.add_to_sql(self.model_name, df, self.pk_columns, self.fk_columns, self.jump_update)
                     print(f'Finish {d} Data')
                 # holiday is blank
                 except AttributeError:
@@ -293,49 +297,45 @@ class CrawlerProcess:
             return None
 
     # 進度判斷
-    def working_process(self):
-        recent = datetime.datetime.now().date()
-        try:
-            day_num = (recent - self.table_latest_date).days
-            if self.range_date == 'date_range':
-                if day_num > 0:
-                    return 0
-                elif day_num == 0:
-                    return 1
-                else:
-                    return 2
-            else:
+    def working_process(self, start_date, end_date):
+        day_num = (end_date - start_date).days
+        if self.range_date == 'date_range':
+            if day_num > 0:
                 return 0
-        except TypeError:
-            print(f"Please use specified_date_crawl to Init Table ")
-            return -1
+            elif day_num == 0:
+                return 1
+            else:
+                return 2
+        else:
+            return 0
 
-    # 自動爬取結尾後日期的資料
-    def auto_update_crawl(self, last_day='Now', deadline=15):
+    # 自動爬取結尾後日期的資料,jump－跳過最近日更新
+    def auto_update_crawl(self, last_day='Now', deadline=15, jump=True):
         try:
             if last_day == 'Now':
-                end_date = datetime.datetime.now()
+                end_date = datetime.datetime.now().date()
             else:
-                end_date = datetime.datetime.strptime(last_day, "%Y-%m-%d")
-            if self.working_process() == 0:
-                start_date = self.table_latest_date
+                end_date = datetime.date.strptime(last_day, "%Y-%m-%d")
+            start_date = self.table_latest_date
+            working_process = self.working_process(start_date, end_date)
+            if working_process == 0:
                 if self.range_date == 'date_range':
                     # [1:] avoid same index,let program be faster
-                    date_list = date_range(start_date, end_date)[1:]
+                    if jump is True:
+                        date_list = date_range(start_date, end_date)[1:]
+                    else:
+                        date_list = date_range(start_date, end_date)
                 elif self.range_date == 'month_range':
                     date_list = self.monthly_import(start_date, end_date, deadline)
                 else:
                     date_list = season_range(start_date, end_date)
                 self.crawl_process(date_list)
-            elif self.working_process() == 1:
+            elif working_process == 1:
                 print(f"Finish Update Work")
-                return None
-            elif self.working_process() == -1:
-                print(f"Please use specified_date_crawl to Init Table ")
                 return None
             else:
                 print(f"The table_latest_date > your setting date,please modify your setting date >{last_day} .")
                 return None
-        except ValueError:
-            print('Error:last_day form is %Y-%m-%d,please modify. ')
+        except Exception as e:
+            print(e)
             return None
