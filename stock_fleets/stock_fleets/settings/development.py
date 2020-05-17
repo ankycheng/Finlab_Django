@@ -1,9 +1,9 @@
 from .base import *
-
+import json5
 # Database
 # https://docs.djangoproject.com/en/2.2/ref/settings/#databases
 
-with open(os.path.join(BASE_DIR, "config.json"), 'r', encoding='utf8') as file:
+with open(os.path.join(BASE_DIR, "config.json"), encoding='utf8') as file:
     CONFIG_DATA = json5.load(file)
     CONFIG_DATA["PRODUCTION"] = False
 DATABASES = {

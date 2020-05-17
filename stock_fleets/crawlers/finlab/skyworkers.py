@@ -1,12 +1,6 @@
 import pandas as pd
-import swifter
 from io import StringIO
 import requests
-import datetime
-from crawlers.finlab.data_process_tools import *
-from crawlers.finlab.import_tools import engine, table_latest_date, AddToSQL
-from django.core.exceptions import ObjectDoesNotExist
-import time
 
 
 class CrawlFuturePriceTW:
@@ -54,14 +48,15 @@ class CrawlCommodityTaifex:
         df = pd.DataFrame(df[0])
         df = df.astype(str)
         df['證券代號'] = df['證券代號'].apply(lambda s: s[:-2])
-        df = df.replace('●', 1).replace('◎', 1)
+        df.iloc[:, 4:9] = df.iloc[:, 4:9].replace('●', 1).replace('◎', 1).replace('nan', 0)
         df['標準型證券股數'] = df['標準型證券股數'].apply(lambda s: pd.to_numeric(s, errors='coerce'))
         df = df.drop(columns=['標的證券'])
         df['標的證券簡稱'] = df['標的證券簡稱'].apply(lambda s: s + '期')
         df = df.rename(columns={k: v for k, v in zip(df.columns, ['stock_id', 'spot_id', 'stock_name', 'check_fc',
                                                                   'check_opt', 'check_sii', 'check_otc', 'check_etf',
                                                                   'spot_unit'])})
-        return df
+        df['spot_id'] = df['spot_id'].apply(lambda s: '00' + s if len(s) < 4 else s)
+        return df.iloc[:-1]
 
     @staticmethod
     def modify_df(df):
@@ -86,6 +81,7 @@ class CrawlCommodityTaifex:
     def crawl_main(cls):
         try:
             df = pd.concat([cls.stock_relate(), cls.normal()])
+            df.iloc[:, 3:8] = df.iloc[:, 3:8].fillna(0)
         except ValueError:
             return None
         return df

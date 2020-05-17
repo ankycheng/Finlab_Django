@@ -11,7 +11,6 @@ https://docs.djangoproject.com/en/2.2/ref/settings/
 """
 
 import os
-import json5
 import pymysql
 
 pymysql.install_as_MySQLdb()
@@ -41,8 +40,10 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'import_export',
     'django_extensions',
+    'rest_framework',
     'crawlers',
-    'financial_officer'
+    'financial_officer',
+    'tdcc_tw'
 ]
 
 MIDDLEWARE = [

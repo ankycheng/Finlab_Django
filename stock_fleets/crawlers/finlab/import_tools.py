@@ -1,8 +1,6 @@
 import datetime
 import time
-import os
 import pandas as pd
-import swifter
 from dateutil.rrule import rrule, DAILY, MONTHLY
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.conf import settings
@@ -18,7 +16,7 @@ dbName = (
     if settings.CONFIG_DATA.get("PRODUCTION")
     else settings.CONFIG_DATA.get("DBNAME_DEV")
 )
-connect_info = "mysql+pymysql://{}:{}@{}:{}/{}?charset=utf8".format(
+connect_info = "mysql+pymysql://{}:{}@{}:{}/{}?charset=utf8mb4".format(
     settings.CONFIG_DATA.get("DBACCOUNT"),
     settings.CONFIG_DATA.get("DBPASSWORD"),
     settings.CONFIG_DATA.get("DBHOST"),
@@ -143,7 +141,7 @@ class AddToSQL:
         return [get_pk_dict, get_pk_contain_dict]
 
     @classmethod
-    def add_to_sql(cls, model_name, df, pk_columns=None, fk_columns=None, jump_update=False):
+    def add_to_sql(cls, model_name, df, pk_columns=None, fk_columns=None, jump_create=False, jump_update=False):
         df = df.where(pd.notnull(df), None)
         columns_list = list(df.columns.values)
         bulk_update_data = []
@@ -173,34 +171,37 @@ class AddToSQL:
                     print(f"error{' '}{e}{' '}Stock_id:{item['stock_id']}")
                     pass
         else:
-            for index, item in df.iterrows():
-                # Use bulk_update to update obj,PS:must include primary key column
-                if jump_update is False:
-                    try:
-                        pk_filter = cls.pk_select(item, pk_columns)
+            if jump_create is True:
+                return None
+            else:
+                for index, item in df.iterrows():
+                    # Use bulk_update to update obj,PS:must include primary key column
+                    if jump_update is False:
                         try:
-                            obj_check = model_name.objects.get(**pk_filter[0])
-                        # 無法區分字母大小寫,回傳2個值
-                        except MultipleObjectsReturned:
-                            obj_check = model_name.objects.get(**pk_filter[1])
+                            pk_filter = cls.pk_select(item, pk_columns)
+                            try:
+                                obj_check = model_name.objects.get(**pk_filter[0])
+                            # 無法區分字母大小寫,回傳2個值
+                            except MultipleObjectsReturned:
+                                obj_check = model_name.objects.get(**pk_filter[1])
 
-                        attribute_data = columns_list
-                        update_data = [item[field] for field in columns_list]
-                        for attribute, update_value in zip(attribute_data, update_data):
-                            setattr(obj_check, attribute, update_value)
-                        # ForeignKey update
-                        if fk_columns is not None:
-                            for attribute, update_value in cls.fk_update(model_name, item, fk_columns):
+                            attribute_data = columns_list
+                            update_data = [item[field] for field in columns_list]
+                            for attribute, update_value in zip(attribute_data, update_data):
                                 setattr(obj_check, attribute, update_value)
-                        bulk_update_data.append(obj_check)
-                    # Use dict to bulk_create obj when get nothing ,process incomplete data
-                    except ObjectDoesNotExist:
+                            # ForeignKey update
+                            if fk_columns is not None:
+                                for attribute, update_value in cls.fk_update(model_name, item, fk_columns):
+                                    setattr(obj_check, attribute, update_value)
+                            bulk_update_data.append(obj_check)
+                        # Use dict to bulk_create obj when get nothing ,process incomplete data
+                        except ObjectDoesNotExist:
+                            bulk_create_func(model_name, columns_list)
+                        except Exception as e:
+                            print(f"error{' '}{e}{' '}Stock_id:{item['stock_id']}")
+                            pass
+                    else:
                         bulk_create_func(model_name, columns_list)
-                    except Exception as e:
-                        print(f"error{' '}{e}{' '}Stock_id:{item['stock_id']}")
-                        pass
-                else:
-                    bulk_create_func(model_name, columns_list)
         # Process bulk
         model_name.objects.bulk_create(bulk_create_data, batch_size=1000)
         if 'date' in columns_list:
@@ -225,8 +226,8 @@ fk_columns-外鍵對應過濾用欄位名
 
 
 class CrawlerProcess:
-    def __init__(self, crawl_class, crawl_method, model_name, range_date, nest=False, time_sleep=4, pk_columns=None,
-                 fk_columns=None, jump_update=False):
+    def __init__(self, crawl_class, crawl_method, model_name, range_date, nest=False, time_sleep=12, pk_columns=None,
+                 fk_columns=None, jump_create=False, jump_update=False):
         self.crawl_class = crawl_class
         self.crawl_method = crawl_method
         self.model_name = model_name
@@ -237,6 +238,7 @@ class CrawlerProcess:
         self.time_sleep = time_sleep
         self.pk_columns = pk_columns
         self.fk_columns = fk_columns
+        self.jump_create = jump_create
         self.jump_update = jump_update
 
     def __repr__(self):
@@ -248,7 +250,8 @@ class CrawlerProcess:
             if self.nest is False:
                 df = getattr(self.crawl_class(d), self.crawl_method)()
                 try:
-                    AddToSQL.add_to_sql(self.model_name, df, self.pk_columns, self.fk_columns, self.jump_update)
+                    AddToSQL.add_to_sql(self.model_name, df, self.pk_columns, self.fk_columns, self.jump_create,
+                                        self.jump_update)
                     print(f'Finish {d} Data')
                 # holiday is blank
                 except AttributeError:
@@ -315,7 +318,7 @@ class CrawlerProcess:
             if last_day == 'Now':
                 end_date = datetime.datetime.now().date()
             else:
-                end_date = datetime.date.strptime(last_day, "%Y-%m-%d")
+                end_date = datetime.datetime.strptime(last_day, "%Y-%m-%d").date()
             start_date = self.table_latest_date
             working_process = self.working_process(start_date, end_date)
             if working_process == 0:

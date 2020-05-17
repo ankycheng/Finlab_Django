@@ -1,21 +1,21 @@
-"""stock_fleets URL Configuration
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/2.2/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
+from tdcc_tw import urls as tdcc_tw_urls
+from rest_framework import routers
+
+routeLists = [
+    tdcc_tw_urls.routeList,
+]
+
+# router reference
+# ref: https://www.django-rest-framework.org/api-guide/routers/
+router = routers.DefaultRouter()
+
+for routeList in routeLists:
+    for route in routeList:
+        router.register(route[0], route[1], basename=route[2])
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/', include((router.urls, 'api'), namespace='api')),
 ]
