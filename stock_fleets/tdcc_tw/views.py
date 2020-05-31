@@ -1,8 +1,8 @@
 from components.backend_api import OrmBasicFilter
 from crawlers.models import StockPriceTW, StockTdccTW
-from rest_framework.response import Response
-from rest_framework import viewsets, status
-from tdcc_tw.serializers import SearchTdccSerializer
+from fastapi import FastAPI
+
+app = FastAPI()
 
 
 class ReloadTdccTW(OrmBasicFilter):
@@ -33,14 +33,9 @@ class ReloadTdccTW(OrmBasicFilter):
         return context
 
 
-class ApiTdccGroup(viewsets.ViewSet):
-    def list(self, request):
-        searchserializer = SearchTdccSerializer(data=request.query_params)
-        query_params = {'model': StockTdccTW}
-        if searchserializer.is_valid():
-            valid_input_params = searchserializer.validated_data
-            query_params.update(valid_input_params)
-            context = ReloadTdccTW(**query_params).group_data()
-            return Response(context, status=status.HTTP_200_OK)
-        else:
-            return Response({}, status=status.HTTP_400_BAD_REQUEST)
+async def read_tdcc(stock_id: str, start_date: str = None, end_date: str = None, offset: int = 0, limit: int = 100000,
+                    recent: int = 1, fields: list = None):
+    query_params = {'model': StockTdccTW, 'stock_id': stock_id, 'start_date': start_date,
+                    'end_date': end_date, 'offset': offset, 'limit': limit, 'recent': recent, 'fields': fields}
+    context = ReloadTdccTW(**query_params).group_data()
+    return context

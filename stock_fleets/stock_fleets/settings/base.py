@@ -40,7 +40,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'import_export',
     'django_extensions',
-    'rest_framework',
     'crawlers',
     'financial_officer',
     'tdcc_tw'
