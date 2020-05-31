@@ -1,5 +1,4 @@
 import pandas as pd
-from django.db.models import Q
 import datetime
 from crawlers.finlab.import_tools import engine
 
@@ -32,33 +31,26 @@ class OrmBasicFilter(GetModelDateRangeBySlice):
         self.fields = fields
 
     def basic_filter_set(self):
-        stock_id = {}
-        start_date = {}
-        end_date = {}
+        query = {}
         if self.stock_id is not None:
-            stock_id['stock_id'] = self.stock_id
+            query['stock_id'] = self.stock_id
         if self.start_date is not None:
-            start = datetime.datetime.strptime(self.start_date, "%Y-%m-%d")
-            start_date['date__gte'] = start
+            query['date__gte'] = self.start_date
         if self.end_date is not None:
-            end = datetime.datetime.strptime(self.end_date, "%Y-%m-%d")
-            end_date['date__lte'] = end
+            query['date__lte'] = self.end_date
         if (self.offset is not 0) and (self.limit is not 100000):
             date_range = self.get_date_list(engine)
-            start_date['date__gte'] = date_range[0]
-            end_date['date__lte'] = date_range[-1]
-        filter_set = {'stock_id': stock_id, 'start_date': start_date, 'end_date': end_date}
-        return filter_set
+            query['date__gte'] = date_range[0]
+            query['date__lte'] = date_range[-1]
+        return query
 
     def get_orm_data(self):
         fs = self.basic_filter_set()
         if self.fields is not None:
             fields = self.fields.split('-')
-            orm_data = self.model.objects.filter(Q(**fs['stock_id']), Q(**fs['start_date']),
-                                                 Q(**fs['end_date'])).order_by('date').values(*fields)
+            orm_data = self.model.objects.filter(**fs).order_by('date').values(*fields)
         else:
-            orm_data = self.model.objects.filter(Q(**fs['stock_id']), Q(**fs['start_date']),
-                                                 Q(**fs['end_date'])).order_by('date').values()
+            orm_data = self.model.objects.filter(**fs).order_by('date').values()
         return orm_data
 
     def get_dataframe(self):

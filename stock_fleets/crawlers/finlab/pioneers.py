@@ -5,6 +5,7 @@ import datetime
 from crawlers.finlab.data_process_tools import year_transfer, last_month, char_filter, symbols_change
 from crawlers.finlab.import_tools import engine, table_latest_date, AddToSQL
 from crawlers.models import CompanyBasicInfoTW, BrokerInfoTW, BrokerTradeTW
+import time
 
 
 class CrawlStockPriceTW:
@@ -164,7 +165,7 @@ class CrawlMonthlyRevnueTW:
                 df['當月營收'] = pd.to_numeric(df['當月營收'], 'coerce')
                 df = df[~df['當月營收'].isnull()]
                 df = df[df['公司代號'] != '合計']
-                df['date'] = datetime.date(self.date.year, self.date.month, 10).date()
+                df['date'] = datetime.date(self.date.year, self.date.month, 10)
                 df = df.rename(columns={'公司代號': 'stock_id'})
                 df = df.set_index(['stock_id', 'date'])
                 data.append(df)
@@ -540,7 +541,7 @@ class CrawlBrokerTradeTW:
             return None
 
     def broker_trade(self, stock_id):
-        print(stock_id)
+        # print(stock_id)
         url = 'https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco.djhtm?a=' + stock_id + '&e=' + self.start_date_str + \
               '&f=' + self.start_date_str
         r = requests.post(url)
@@ -569,9 +570,9 @@ class CrawlBrokerTradeTW:
         df_all['broker_name'] = df_all['broker_name'].apply(lambda s: s.replace('證券', '')).apply(
             lambda s: s.replace('(牛牛牛)', '犇'))
         df_all['stock_id'] = str(stock_id)
-        AddToSQL.add_to_sql(BrokerTradeTW, df_all, ['stock_id', 'date', 'broker_name'],
-                            [{'broker_name': 'broker_name'}, {'stock_id': 'stock_id'}],
-                            jump_update=True)
+        # AddToSQL.add_to_sql(BrokerTradeTW, df_all, pk_columns=['stock_id', 'date', 'broker_name'],
+        #                     fk_columns=[{'broker_name': 'broker_name'}, {'stock_id': 'stock_id'}],
+        #                     jump_update=True)
         return df_all
 
     def crawl_main(self):
@@ -580,14 +581,17 @@ class CrawlBrokerTradeTW:
         if crawl_list is not None:
             # check is new or old process
             new_obj = BrokerTradeTW.objects.filter(date=self.start_date_str)
+            data = []
             if len(new_obj) > 0:
                 table_last_day = table_latest_date(engine, BrokerTradeTW._meta.db_table)
                 finish_obj = BrokerTradeTW.objects.filter(date=table_last_day)
                 last_stock_id = finish_obj[len(finish_obj) - 1].stock_id
                 crawl_list = crawl_list[crawl_list.index(last_stock_id) + 1:]
             for stock_id in crawl_list:
-                self.broker_trade(stock_id)
+                data.append(self.broker_trade(stock_id))
                 # time.sleep(0.5)
+            data = pd.concat(data)
+            return data
         else:
             pass
 

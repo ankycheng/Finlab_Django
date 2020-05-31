@@ -226,7 +226,7 @@ fk_columns-外鍵對應過濾用欄位名
 
 
 class CrawlerProcess:
-    def __init__(self, crawl_class, crawl_method, model_name, range_date, nest=False, time_sleep=12, pk_columns=None,
+    def __init__(self, crawl_class, crawl_method, model_name, range_date, nest=False, time_sleep=13, pk_columns=None,
                  fk_columns=None, jump_create=False, jump_update=False):
         self.crawl_class = crawl_class
         self.crawl_method = crawl_method
