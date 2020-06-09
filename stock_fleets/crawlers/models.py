@@ -225,3 +225,30 @@ class FuturePriceTW(models.Model):
     cross_contract_vol = models.FloatField(blank=True, null=True, verbose_name="價差對單式委託成交量")
     commodity_info = models.ForeignKey("CommodityTaifex", blank=True, null=True, on_delete=models.SET_NULL,
                                        db_constraint=False, verbose_name="公司資訊")
+
+
+class StockInsiderHoldTW(models.Model):
+    stock_id = models.CharField(max_length=100, verbose_name="證券代號")
+    date = models.DateField(verbose_name="資料日期")
+    stock_name = models.CharField(max_length=100, null=True, verbose_name="證券名稱")
+    issued_num = models.FloatField(blank=True, null=True, verbose_name="發行股數")
+    director_add = models.FloatField(blank=True, null=True, verbose_name="董監增持")
+    director_lower = models.FloatField(blank=True, null=True, verbose_name="董監減持")
+    director_hold = models.FloatField(blank=True, null=True, verbose_name="董監持股")
+    director_hold_ratio = models.FloatField(blank=True, null=True, verbose_name="董監持股比率")
+    manager_hold = models.FloatField(blank=True, null=True, verbose_name="經理人持股")
+    big10_hold = models.FloatField(blank=True, null=True, verbose_name="持有10趴以上持有人持股")
+
+
+class StockInsiderHoldDetailTW(models.Model):
+    stock_id = models.CharField(max_length=100, verbose_name="證券代號")
+    date = models.DateField(verbose_name="資料日期")
+    title = models.CharField(max_length=100, null=True, verbose_name="職稱")
+    name = models.CharField(max_length=100, null=True, verbose_name="姓名")
+    act_hold = models.FloatField(blank=True, null=True, verbose_name="選任時持股")
+    hold = models.FloatField(blank=True, null=True, verbose_name="目前持股")
+    pledge = models.FloatField(blank=True, null=True, verbose_name="質押股數")
+    pledge_ratio = models.FloatField(blank=True, null=True, verbose_name="質押比例")
+    family_hold = models.FloatField(blank=True, null=True, verbose_name="配偶或未成年子女持股")
+    family_pledge = models.FloatField(blank=True, null=True, verbose_name="配偶或未成年子女質押股數")
+    family_pledge_ratio = models.FloatField(blank=True, null=True, verbose_name="配偶或未成年子女質押比例")

@@ -7,9 +7,9 @@ from django.conf import settings
 from sqlalchemy import create_engine
 from django.db import models
 
-"""""
-DB connection
-"""""
+# """""
+# DB connection
+# """""
 
 dbName = (
     settings.CONFIG_DATA.get("DBNAME")
@@ -25,9 +25,10 @@ connect_info = "mysql+pymysql://{}:{}@{}:{}/{}?charset=utf8mb4".format(
 )
 engine = create_engine(connect_info)
 
-"""""
-date generator
-"""""
+
+# """""
+# date generator
+# """""
 
 
 def date_range(start_date, end_date):
@@ -53,9 +54,9 @@ def season_range(start_date, end_date):
     return ret
 
 
-"""""
-Table check tools
-"""""
+# """""
+# Table check tools
+# """""
 
 
 def table_exist(conn, table):
@@ -92,12 +93,11 @@ def in_date_list(conn, model_name, check_date):
         return False
 
 
-"""""
-Dataframe匯入DB,適用時間序列資料,fk_columns-外鍵對應過濾用欄位名
-"""""
-
-
 class AddToSQL:
+    """""
+    Dataframe匯入DB,適用時間序列資料,fk_columns-外鍵對應過濾用欄位名
+    """""
+
     @classmethod
     def get_fk_field_names(cls, model_name):
         fk_field_names = [field.name for field in model_name._meta.fields
@@ -214,18 +214,17 @@ class AddToSQL:
         print(f"Finish{' '}{model_name}{'date'}{':'}{print_date}{' '}{'bulk_update'}{':'}{len(bulk_update_data)}")
 
 
-"""""
-爬蟲執行物件,適用時間序列資料
-Attributes:
-crawl_class-爬蟲類別、crawl_method-類別執行方法、model_name-存取資料庫模型、range_date-爬蟲日期產生器週期選擇
-time_sleep-爬蟲間隔時間
-nest-巢狀爬蟲，一日內執行多次，分次輸入，不用整併每日後再輸入，避免中斷白工
-pk_columns-update檢測用主鍵群
-fk_columns-外鍵對應過濾用欄位名
-"""""
-
-
 class CrawlerProcess:
+    """""
+    爬蟲執行物件,適用時間序列資料
+    Attributes:
+    crawl_class-爬蟲類別、crawl_method-類別執行方法、model_name-存取資料庫模型、range_date-爬蟲日期產生器週期選擇
+    time_sleep-爬蟲間隔時間
+    nest-巢狀爬蟲，一日內執行多次，分次輸入，不用整併每日後再輸入，避免中斷白工
+    pk_columns-update檢測用主鍵群
+    fk_columns-外鍵對應過濾用欄位名
+    """""
+
     def __init__(self, crawl_class, crawl_method, model_name, range_date, nest=False, time_sleep=13, pk_columns=None,
                  fk_columns=None, jump_create=False, jump_update=False):
         self.crawl_class = crawl_class

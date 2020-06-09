@@ -2,10 +2,11 @@ import pandas as pd
 from io import StringIO
 import requests
 import datetime
-from crawlers.finlab.data_process_tools import year_transfer, last_month, char_filter, symbols_change
+from crawlers.finlab.data_process_tools import year_transfer, last_month, char_filter, symbols_change, url_month
 from crawlers.finlab.import_tools import engine, table_latest_date, AddToSQL
 from crawlers.models import CompanyBasicInfoTW, BrokerInfoTW, BrokerTradeTW
 import time
+from bs4 import BeautifulSoup
 
 
 class CrawlStockPriceTW:
@@ -942,3 +943,115 @@ class CrawlStock3PRatioTW:
         except ValueError:
             return None
         return df
+
+
+class CrawlInsiderHoldTW:
+    def __init__(self, date):
+        self.date = date
+        self.target_name = "董事、監察人、經理人及大股東持股餘額彙總表"
+        self.sub_market = ["sii", "otc", "rotc"]
+
+    def crawl_main(self):
+        url_date = last_month(self.date)
+        data = []
+        for market in self.sub_market:
+            url = 'https://siis.twse.com.tw/publish/' + market + '/' + str(
+                url_date.year - 1911) + 'IRB110_' + url_month(url_date.month) + '.HTM'
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko)'
+                              ' Chrome/39.0.2171.95 Safari/537.36'}
+            try:
+                r = requests.get(url, headers=headers)
+                r.encoding = 'big5'
+                df = pd.read_html(r.text)[0].iloc[2:, :]
+                data.append(df)
+            except ValueError:
+                print(print(f'market:{market}**WARRN: Pandas cannot find any table in the HTML file'))
+                pass
+        try:
+            df = pd.concat(data)
+        except ValueError:
+            return None
+        df = df.astype(str)
+        df.columns = ['stock_name', 'issued_num', 'director_add', 'director_lower', 'director_hold',
+                      'director_hold_ratio', 'manager_hold', 'big10_hold']
+        df.iloc[:, 1:] = df.iloc[:, 1:].apply(lambda s: pd.to_numeric(s, errors="coerce"))
+        df['stock_id'] = df['stock_name'].apply(lambda s: s[:4])
+        df['stock_name'] = df['stock_name'].apply(lambda s: s[4:])
+        df['date'] = datetime.date(self.date.year, self.date.month, 20)
+        return df
+
+
+class CrawlInsiderHoldDetailTW:
+    def __init__(self, date):
+        self.date = date
+        self.url_date = last_month(self.date)
+        self.target_name = "董事、監察人、經理人及大股東持股月明細"
+        self.sub_market = ["sii", "otc", "rotc"]
+
+    def check_trade_day(self):
+        month_date = self.date.strftime('%Y-%m-10')
+        df = MonthlyRevenueTW.objects.filter(date=month_date).order_by('stock_id').values('stock_id')
+        df = [v['stock_id'] for v in df]
+        if len(df) > 0:
+            return df
+        else:
+            return None
+
+    def detail(self, stock_id, year, month):
+        print(stock_id)
+        url = 'https://mops.twse.com.tw/mops/web/ajax_stapap1'
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko)'
+                          ' Chrome/39.0.2171.95 Safari/537.36'}
+        res = requests.post(url, {
+            'firstin': 'true',
+            'year': year,
+            'month': month,
+            'co_id': stock_id,
+            'step': '0'
+        }, headers=headers
+                            )
+        try:
+            df = pd.read_html(res.text)
+        except Exception as e:
+            print(e)
+            return None
+        try:
+            table_loc = [i for i in range(len(df)) if len(df[i]) > 10][0]
+        except Exception as e:
+            print(e)
+            return None
+        df = df[table_loc]
+        df = df[df[0] != '職稱']
+        df = df.astype(str)
+        df = df.apply(lambda s: s.str.replace("%", ""))
+        df.columns = ['title', 'name', 'act_hold', 'hold', 'pledge',
+                      'pledge_ratio', 'family_hold', 'family_pledge', 'family_pledge_ratio']
+        df.iloc[:, 2:] = df.iloc[:, 2:].apply(lambda s: pd.to_numeric(s, errors="coerce"))
+        df['stock_id'] = stock_id
+        df['date'] = datetime.date(self.date.year, self.date.month, 20)
+        #         AddToSQL.add_to_sql(InsiderHoldDetailTW, df, pk_columns=['stock_id', 'date', 'title', 'name'],
+        #                             jump_update=True)
+        return df
+
+    def crawl_main(self):
+        crawl_list = self.check_trade_day()
+        year = self.url_date.year - 1911
+        month = self.url_date.month
+        # check holiday
+        if crawl_list is not None:
+            # check is new or old process
+            #             new_obj = InsiderHoldDetailTW.objects.filter(date=self.start_date_str)
+            #             if len(new_obj) > 0:
+            #                 table_last_day = table_latest_date(engine, InsiderHoldDetailTW._meta.db_table)
+            #                 finish_obj = InsiderHoldDetailTW.objects.filter(date=table_last_day)
+            #                 last_stock_id = finish_obj[len(finish_obj) - 1].stock_id
+            #                 crawl_list = crawl_list[crawl_list.index(last_stock_id) + 1:]
+            data = []
+            for stock_id in crawl_list:
+                data.append(self.detail(stock_id, year, month))
+                time.sleep(3)
+            return data
+        else:
+            pass
