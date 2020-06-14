@@ -589,8 +589,9 @@ class CrawlBrokerTradeTW:
                 last_stock_id = finish_obj[len(finish_obj) - 1].stock_id
                 crawl_list = crawl_list[crawl_list.index(last_stock_id) + 1:]
             for stock_id in crawl_list:
+                # self.broker_trade(stock_id)
                 data.append(self.broker_trade(stock_id))
-                # time.sleep(0.5)
+                # time.sleep(2.5)
             data = pd.concat(data)
             return data
         else:
