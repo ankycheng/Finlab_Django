@@ -1,19 +1,19 @@
 import pandas as pd
-import datetime
 from crawlers.finlab.import_tools import engine
 
 
 class GetModelDateRangeBySlice:
-    def __init__(self, model, offset=0, limit=100000, recent=True):
+    def __init__(self, model, offset=0, limit=100000, recent=1):
         self.model = model
-        self.offset = offset
-        self.limit = limit
-        self.recent = recent
+        self.offset = int(offset)
+        self.limit = int(limit)
+        self.recent = int(recent)
 
     def get_date_list(self, conn):
         table = self.model._meta.db_table
-        if self.recent:
-            cursor = sorted(list(conn.execute("SELECT DISTINCT date FROM " + table)))[-self.offset:self.limit]
+        if self.recent == 1:
+            cursor = sorted(list(conn.execute("SELECT DISTINCT date FROM " + table)))[
+                     -self.offset:-self.offset + self.limit]
         else:
             cursor = sorted(list(conn.execute("SELECT DISTINCT date FROM " + table)))[
                      self.offset:self.offset + self.limit]
