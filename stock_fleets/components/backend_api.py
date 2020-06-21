@@ -22,7 +22,7 @@ class GetModelDateRangeBySlice:
 
 
 class OrmBasicFilter(GetModelDateRangeBySlice):
-    def __init__(self, model, stock_id, start_date=None, end_date=None, offset=0, limit=100000, recent=True,
+    def __init__(self, model, stock_id=None, start_date=None, end_date=None, offset=0, limit=100000, recent=True,
                  fields=None):
         super().__init__(model, offset, limit, recent)
         self.stock_id = stock_id

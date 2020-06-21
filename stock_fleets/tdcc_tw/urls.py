@@ -1,5 +1,7 @@
 from tdcc_tw import views
 
+# method ,path ,tag ,view
 routeList = (
-    ('/tdcc/', views.read_tdcc),
+    ('get', '/tdcc_search/', "tdcc", views.read_tdcc),
+    ('get', '/tdcc_strategy/', "tdcc", views.tdcc_strategy),
 )
