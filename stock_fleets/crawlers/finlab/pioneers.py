@@ -4,9 +4,8 @@ import requests
 import datetime
 from crawlers.finlab.data_process_tools import year_transfer, last_month, char_filter, symbols_change, url_month
 from crawlers.finlab.import_tools import engine, table_latest_date, AddToSQL
-from crawlers.models import CompanyBasicInfoTW, BrokerInfoTW, BrokerTradeTW
+from crawlers.models import CompanyBasicInfoTW, BrokerInfoTW, BrokerTradeTW ,MonthlyRevenueTW
 import time
-from bs4 import BeautifulSoup
 
 
 class CrawlStockPriceTW:
@@ -29,13 +28,13 @@ class CrawlStockPriceTW:
         df = df.astype(str)
         df = df.apply(lambda s: s.str.replace(",", ""))
         df.iloc[:, 2:] = df.iloc[:, 2:].apply(lambda s: pd.to_numeric(s, errors="coerce"))
-        df["date"] = self.date.date()
+        df["date"] = pd.to_datetime(self.date).date()
         df = df[["證券代號", "date", "證券名稱", "成交股數", "成交金額", "開盤價", "收盤價", "最高價", "最低價"]]
         df = df.rename(columns={"證券代號": "stock_id", "證券名稱": "stock_name",
                                 "成交股數": "turnover_vol", "成交金額": "turnover_price",
                                 "開盤價": "open_price", "收盤價": "close_price",
                                 "最高價": "high_price", "最低價": "low_price"})
-        df['market'] = '上市'
+        df['market'] = 'twse'
         return df
 
     @staticmethod
@@ -72,7 +71,7 @@ class CrawlStockPriceTW:
         df["stock_id"] = df["代號"]
         df["代號"] = df["代號"].apply(lambda s: self.select_otc_id(s))
         df = df[df["代號"]]
-        df["date"] = self.date.date()
+        df["date"] = pd.to_datetime(self.date).date()
         df = df[["stock_id", "date", "名稱", "成交股數", "成交金額(元)", "開盤", "收盤", "最高", "最低"]]
         df = df.rename(columns={"名稱": "stock_name",
                                 "成交股數": "turnover_vol", "成交金額(元)": "turnover_price",
@@ -80,7 +79,7 @@ class CrawlStockPriceTW:
                                 "最高": "high_price", "最低": "low_price"})
         df.iloc[:, 3:] = df.iloc[:, 3:].apply(lambda s: pd.to_numeric(s, errors="coerce"))
         df = df[df["turnover_vol"] >= 0]
-        df['market'] = '上櫃'
+        df['market'] = 'otc'
         return df
 
     def crawl_rotc(self):
@@ -101,7 +100,7 @@ class CrawlStockPriceTW:
         df = df.astype(str)
         df = df.apply(lambda s: s.str.replace(",", ""))
         df.iloc[:, 3:] = df.iloc[:, 3:].apply(lambda s: pd.to_numeric(s, errors="coerce"))
-        df["date"] = self.date.date()
+        df["date"] = pd.to_datetime(self.date).date()
         if "證券名稱" in df.columns:
             df = df[["證券代號", "date", "證券名稱", "成交量", "成交金額", "前日均價", "最後", "最高", "最低"]]
         # old format("名稱")
@@ -117,7 +116,7 @@ class CrawlStockPriceTW:
         df['stock_id'] = df['stock_id'].apply(lambda s: s[:s.index(' ')] if '" "' in s else s)
         df['stock_name'] = df['stock_name'].apply(lambda s: s[:s.index(' ')] if '" "' in s else s)
         df = df[df["stock_id"] != "合計"]
-        df['market'] = '興櫃'
+        df['market'] = 'rotc'
         return df
 
     def crawl_main(self):

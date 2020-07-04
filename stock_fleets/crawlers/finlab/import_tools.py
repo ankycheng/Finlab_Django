@@ -143,6 +143,10 @@ class AddToSQL:
     @classmethod
     def add_to_sql(cls, model_name, df, pk_columns=None, fk_columns=None, jump_create=False, jump_update=False):
         df = df.where(pd.notnull(df), None)
+        if pk_columns:
+            df = df.drop_duplicates(pk_columns, keep='first')
+        else:
+            df = df.drop_duplicates(['stock_id', 'date'], keep='first')
         columns_list = list(df.columns.values)
         bulk_update_data = []
         bulk_create_data = []
@@ -246,8 +250,8 @@ class CrawlerProcess:
 
     def crawl_process(self, date_list: list):
         for d in date_list:
+            df = getattr(self.crawl_class(d), self.crawl_method)()
             if self.nest is False:
-                df = getattr(self.crawl_class(d), self.crawl_method)()
                 try:
                     AddToSQL.add_to_sql(self.model_name, df, self.pk_columns, self.fk_columns, self.jump_create,
                                         self.jump_update)
@@ -257,7 +261,6 @@ class CrawlerProcess:
                     print(f'fail, check if {d} is a holiday')
             else:
                 try:
-                    df = getattr(self.crawl_class(d), self.crawl_method)()
                     if df is False:
                         print(f'fail, check if {d} is a holiday')
                 # holiday is blank

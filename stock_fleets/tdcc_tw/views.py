@@ -32,4 +32,4 @@ async def tdcc_strategy(request: Request, response: Response, start_date: str = 
         return {'list1': context}
     except KeyError:
         response.status_code = status.HTTP_400_BAD_REQUEST
-        return {'error_msg': 'stock_id is not in db.'}
+        return {'error_msg': 'data is not in db.'}

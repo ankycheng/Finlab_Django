@@ -11,9 +11,9 @@ https://docs.djangoproject.com/en/2.2/ref/settings/
 """
 
 import os
-import pymysql
-
-pymysql.install_as_MySQLdb()
+# import pymysql
+#
+# pymysql.install_as_MySQLdb()
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -42,7 +42,8 @@ INSTALLED_APPS = [
     'django_extensions',
     'crawlers',
     'financial_officer',
-    'tdcc_tw'
+    'tdcc_tw',
+    'django_q'
 ]
 
 MIDDLEWARE = [
@@ -110,7 +111,18 @@ USE_TZ = False
 # https://docs.djangoproject.com/en/2.2/howto/static-files/
 
 STATIC_URL = '/static/'
+
 # django 3.0 new items
 os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
-# modin_pandas_engine
-os.environ["MODIN_ENGINE"] = "ray"
+
+# django-q broker
+Q_CLUSTER = {
+    'name': 'DjangORM',
+    'workers': 4,
+    'timeout': 90,
+    'retry': 120,
+    'queue_limit': 50,
+    'bulk': 10,
+    'orm': 'default'
+}
+

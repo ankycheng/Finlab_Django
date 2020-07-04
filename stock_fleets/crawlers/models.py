@@ -13,6 +13,10 @@ class StockPriceTW(models.Model):
     turnover_price = models.FloatField(blank=True, null=True, verbose_name="成交金額")
     market = models.CharField(default=None, max_length=100, verbose_name="市場別")
 
+    class Meta:
+        db_table = 'stock_price_tw'
+        unique_together = ['stock_id', 'date']
+
 
 class MonthlyRevenueTW(models.Model):
     stock_id = models.CharField(max_length=100, verbose_name="證券代號")
@@ -27,6 +31,10 @@ class MonthlyRevenueTW(models.Model):
     cm_last_month_rev = models.FloatField(blank=True, null=True, verbose_name="去年累計營收")
     cp_cm_rev = models.FloatField(blank=True, null=True, verbose_name="前期比較增減(%)")
     note = models.CharField(max_length=500, null=True, verbose_name="備註")
+
+    class Meta:
+        db_table = 'monthly_revenue_tw'
+        unique_together = ['stock_id', 'date']
 
 
 class CompanyBasicInfoTW(models.Model):
@@ -75,12 +83,20 @@ class CompanyBasicInfoTW(models.Model):
 
     stock_issued_num.fget.short_description = '發行股票張數'
 
+    class Meta:
+        db_table = 'company_info_tw'
+        indexes = [models.Index(fields=['stock_id'])]
+
 
 class StockIndexPriceTW(models.Model):
     stock_id = models.CharField(max_length=100, verbose_name="證券代號")
     date = models.DateField(verbose_name="資料日期")
     index_price = models.FloatField(blank=True, null=True, verbose_name="指數點數")
     quote_change = models.FloatField(blank=True, null=True, verbose_name="漲跌百分比")
+
+    class Meta:
+        db_table = 'stock_index_price_tw'
+        unique_together = ['stock_id', 'date']
 
 
 class StockIndexVolTW(models.Model):
@@ -89,6 +105,10 @@ class StockIndexVolTW(models.Model):
     turnover_vol = models.FloatField(blank=True, null=True, verbose_name="成交股數")
     turnover_price = models.FloatField(blank=True, null=True, verbose_name="成交金額")
     turnover_num = models.BigIntegerField(blank=True, null=True, verbose_name="成交筆數")
+
+    class Meta:
+        db_table = 'stock_index_vol_tw'
+        unique_together = ['stock_id', 'date']
 
 
 class BrokerInfoTW(models.Model):
@@ -102,6 +122,10 @@ class BrokerInfoTW(models.Model):
     latitude = models.FloatField(blank=True, null=True, verbose_name="緯度")
     city = models.CharField(blank=True, null=True, default=None, max_length=100, verbose_name="縣市")
     district = models.CharField(blank=True, null=True, default=None, max_length=100, verbose_name="鄉鎮區")
+
+    class Meta:
+        db_table = 'broker_info_tw'
+        indexes = [models.Index(fields=['stock_id'])]
 
 
 class BrokerTradeTW(models.Model):
@@ -117,6 +141,10 @@ class BrokerTradeTW(models.Model):
                                     db_constraint=False, verbose_name="券商資訊")
     company_info = models.ForeignKey("CompanyBasicInfoTW", blank=True, null=True, on_delete=models.SET_NULL,
                                      db_constraint=False, verbose_name="公司資訊")
+
+    class Meta:
+        db_table = 'broker_trade_tw'
+        unique_together = ['stock_id', 'date', 'broker_name']
 
 
 class StockTiiTW(models.Model):
@@ -142,6 +170,10 @@ class StockTiiTW(models.Model):
     dealer_net = models.FloatField(blank=True, null=True, verbose_name="全自營商買賣超股數")
     tii_net = models.FloatField(blank=True, null=True, verbose_name="三大法人買賣超股數")
 
+    class Meta:
+        db_table = 'stock_tii_tw'
+        unique_together = ['stock_id', 'date']
+
 
 class StockTiiMarketReportTW(models.Model):
     stock_id = models.CharField(max_length=100, verbose_name="證券代號")
@@ -151,6 +183,10 @@ class StockTiiMarketReportTW(models.Model):
     net = models.FloatField(blank=True, null=True, verbose_name="買賣超金額")
     market = models.CharField(default=None, max_length=100, verbose_name="市場別")
 
+    class Meta:
+        db_table = 'stock_tii_market_tw'
+        unique_together = ['stock_id', 'date', 'market']
+
 
 class StockTdccTW(models.Model):
     stock_id = models.CharField(max_length=100, verbose_name="證券代號")
@@ -159,6 +195,10 @@ class StockTdccTW(models.Model):
     people = models.FloatField(blank=True, null=True, verbose_name="人數")
     hold_num = models.FloatField(blank=True, null=True, verbose_name="持有股數")
     hold_pt = models.FloatField(blank=True, null=True, verbose_name="分級占比")
+
+    class Meta:
+        db_table = 'stock_tdcc_tw'
+        unique_together = ['stock_id', 'date', 'hold_class']
 
 
 class StockMarginTransactionsTW(models.Model):
@@ -182,6 +222,10 @@ class StockMarginTransactionsTW(models.Model):
     mt_use_rate = models.FloatField(blank=True, null=True, verbose_name="融資使用率")
     ss_use_rate = models.FloatField(blank=True, null=True, verbose_name="融券使用率")
 
+    # class Meta:
+    #     db_table = 'stock_margin_transactions_tw'
+    #     unique_together = ['stock_id', 'date']
+
 
 class Stock3PRatioTW(models.Model):
     stock_id = models.CharField(max_length=100, verbose_name="證券代號")
@@ -190,6 +234,10 @@ class Stock3PRatioTW(models.Model):
     dividend_yield = models.FloatField(blank=True, null=True, verbose_name="殖利率")
     pe = models.FloatField(blank=True, null=True, verbose_name="本益比")
     pb = models.FloatField(blank=True, null=True, verbose_name="本淨比")
+
+    class Meta:
+        db_table = 'stock_3P_ratio_tw'
+        unique_together = ['stock_id', 'date']
 
 
 class CommodityTaifex(models.Model):
@@ -204,6 +252,10 @@ class CommodityTaifex(models.Model):
     spot_unit = models.FloatField(blank=True, null=True, verbose_name="契約現貨單位")
     company_info = models.ForeignKey("CompanyBasicInfoTW", blank=True, null=True, on_delete=models.SET_NULL,
                                      db_constraint=False, verbose_name="公司資訊")
+
+    class Meta:
+        db_table = 'commodity_taifex_tw'
+        indexes = [models.Index(fields=['stock_id'])]
 
 
 class FuturePriceTW(models.Model):
@@ -226,6 +278,10 @@ class FuturePriceTW(models.Model):
     commodity_info = models.ForeignKey("CommodityTaifex", blank=True, null=True, on_delete=models.SET_NULL,
                                        db_constraint=False, verbose_name="公司資訊")
 
+    class Meta:
+        db_table = 'future_price_tw'
+        unique_together = ['stock_id', 'date']
+
 
 class StockInsiderHoldTW(models.Model):
     stock_id = models.CharField(max_length=100, verbose_name="證券代號")
@@ -238,6 +294,10 @@ class StockInsiderHoldTW(models.Model):
     director_hold_ratio = models.FloatField(blank=True, null=True, verbose_name="董監持股比率")
     manager_hold = models.FloatField(blank=True, null=True, verbose_name="經理人持股")
     big10_hold = models.FloatField(blank=True, null=True, verbose_name="持有10趴以上持有人持股")
+
+    class Meta:
+        db_table = 'stock_insider_hold_tw'
+        unique_together = ['stock_id', 'date']
 
 
 class StockInsiderHoldDetailTW(models.Model):
@@ -252,3 +312,7 @@ class StockInsiderHoldDetailTW(models.Model):
     family_hold = models.FloatField(blank=True, null=True, verbose_name="配偶或未成年子女持股")
     family_pledge = models.FloatField(blank=True, null=True, verbose_name="配偶或未成年子女質押股數")
     family_pledge_ratio = models.FloatField(blank=True, null=True, verbose_name="配偶或未成年子女質押比例")
+
+    class Meta:
+        db_table = 'stock_insider_hold_detail_tw'
+        unique_together = ['stock_id', 'date']
