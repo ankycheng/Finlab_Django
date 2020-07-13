@@ -1,9 +1,6 @@
 import datetime
 
 
-
-
-
 def year_transfer(t):
     """""
     民國年日期轉換
@@ -16,9 +13,6 @@ def year_transfer(t):
     except ValueError:
         date = None
     return date
-
-
-
 
 
 def last_month(date):
@@ -35,9 +29,6 @@ def last_month(date):
     return url_date
 
 
-
-
-
 def char_filter(target, *trash_key):
     """""
     垃圾字切片
@@ -46,9 +37,6 @@ def char_filter(target, *trash_key):
         if trash_word in target:
             target = target[:target.index(trash_word)]
     return target
-
-
-
 
 
 def symbols_change(word, target=None):
@@ -74,4 +62,4 @@ def url_month(month):
         m = '0' + str(month)
     else:
         m = str(month)
-        return m
+    return m

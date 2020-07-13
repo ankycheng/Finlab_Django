@@ -154,6 +154,14 @@ class Migration(migrations.Migration):
             table='stock_tii_tw',
         ),
         migrations.AlterUniqueTogether(
+            name='stockmargintransactionstw',
+            unique_together={('stock_id', 'date')},
+        ),
+        migrations.AlterModelTable(
+            name='stockmargintransactionstw',
+            table='stock_margin_transactions_tw',
+        ),
+        migrations.AlterUniqueTogether(
             name='stockinsiderholdtw',
             unique_together={('stock_id', 'date')},
         ),
@@ -162,3 +170,4 @@ class Migration(migrations.Migration):
             unique_together={('stock_id', 'date')},
         ),
     ]
+

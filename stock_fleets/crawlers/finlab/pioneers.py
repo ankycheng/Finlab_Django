@@ -4,8 +4,10 @@ import requests
 import datetime
 from crawlers.finlab.data_process_tools import year_transfer, last_month, char_filter, symbols_change, url_month
 from crawlers.finlab.import_tools import engine, table_latest_date, AddToSQL
-from crawlers.models import CompanyBasicInfoTW, BrokerInfoTW, BrokerTradeTW ,MonthlyRevenueTW
+from crawlers.models import CompanyBasicInfoTW, BrokerInfoTW, BrokerTradeTW, MonthlyRevenueTW
 import time
+import json
+import numpy as np
 
 
 class CrawlStockPriceTW:
@@ -350,7 +352,8 @@ class CrawlStockIndexVolTW:
         df = df.astype(str)
         df = df.apply(lambda s: s.str.replace(',', ''))
         df = df.rename(
-            columns={'分類指數名稱': 'stock_id', '成交股數': 'turnover_vol', '成交金額': 'turnover_price', '成交筆數': 'turnover_num'})
+            columns={'分類指數名稱': 'stock_id', '成交股數': 'turnover_vol', '成交金額': 'turnover_price',
+                     '成交筆數': 'turnover_num'})
         df['date'] = self.date.date()
         df[['turnover_vol', 'turnover_price', 'turnover_num']] = df[['turnover_vol', 'turnover_price',
                                                                      'turnover_num']].apply(
@@ -1055,3 +1058,131 @@ class CrawlInsiderHoldDetailTW:
             return data
         else:
             pass
+
+
+class CrawlStockDivideRatioTW:
+    def __init__(self):
+        self.target_name = "台股股價還原表"
+        self.format = "time_series"
+        self.year = datetime.datetime.now().year
+
+    @staticmethod
+    def otc_date():
+        y = datetime.datetime.now().year
+        m = datetime.datetime.now().month
+        d = datetime.datetime.now().day
+        y = str(y - 1911)
+        m = str(m) if m > 9 else '0' + str(m)
+        d = str(d) if d > 9 else '0' + str(d)
+        datestr = '%s/%s/%s' % (y, m, d)
+        return datestr
+
+    def twse_divide_ratio(self):
+        datestr = datetime.datetime.now().strftime('%Y%m%d')
+        res = requests.get(
+            "https://www.twse.com.tw/exchangeReport/TWT49U?response=csv&strDate=" + str(self.year) + "0101&endDate=" \
+            + datestr + "&_=1651532565786")
+        df = pd.read_csv(StringIO(res.text.replace("=", "")), header=1)
+        df = df.dropna(thresh=5).dropna(how='all', axis=1)
+        df = df[~df['資料日期'].isnull()]
+        # set stock id
+        df['stock_id'] = df['股票代號']
+        # set dates
+        df = df[~df['資料日期'].isnull()]
+        years = df['資料日期'].str.split('年').str[0].astype(int) + 1911
+        years.loc[df['資料日期'].str[3] != '年'] = np.nan
+        years.loc[years > datetime.datetime.now().year] = np.nan
+        years.ffill(inplace=True)
+        dates = years.astype(int).astype(str) + '/' + df['資料日期'].str.split('年').str[1].str.replace('月',
+                                                                                                   '/').str.replace('日',
+                                                                                                                    '')
+        df['date'] = pd.to_datetime(dates, errors='coerce')
+        # convert to float
+        float_name_list = ['除權息前收盤價', '除權息參考價', '權值+息值', '漲停價格',
+                           '跌停價格', '開盤競價基準', '減除股利參考價', '最近一次申報每股 (單位)淨值',
+                           '最近一次申報每股 (單位)盈餘']
+        df[float_name_list] = df[float_name_list].astype(str).apply(lambda s: s.str.replace(',', '')).astype(float)
+        df['divide_ratio'] = df['除權息前收盤價'] / df['開盤競價基準']
+        df = df.drop(columns=['資料日期', '股票代號', '漲停價格', '跌停價格', '詳細資料', '最近一次申報資料 季別/日期',
+                              '最近一次申報每股 (單位)淨值', '最近一次申報每股 (單位)盈餘', '減除股利參考價'])
+        df.columns = ['stock_name', 'divide_before', 'divide_after', 'divide_value', 'divide_category', 'divide_open',
+                      'stock_id', 'date', 'divide_ratio']
+        return df
+
+    def otc_divide_ratio(self):
+        res_otc = requests.get(
+            'https://www.tpex.org.tw/web/stock/exright/dailyquo/exDailyQ_result.php?l=zh-tw&d=' + str(
+                self.year - 1911) + '/01/01&ed='
+            + self.otc_date() + '&_=1651594269115')
+        df = pd.DataFrame(json.loads(res_otc.text)['aaData'])
+        df.columns = ['除權息日期', '代號', '名稱', '除權息前收盤價', '除權息參考價',
+                      '權值', '息值', "權+息值", "權/息", "漲停價格",
+                      "跌停價格", "開盤競價基準", "減除股利參考價", "現金股利", "每千股無償配股",
+                      "現金增資股數", "現金增資認購價", "公開承銷股數", "員工認購股數", "原股東認購數", "按持股比例千股認購"]
+        float_name_list = ['除權息前收盤價', '除權息參考價',
+                           '權值', '息值', "權+息值", "漲停價格", "跌停價格", "開盤競價基準",
+                           "減除股利參考價", "現金股利", "每千股無償配股", "現金增資股數", "現金增資認購價",
+                           "公開承銷股數", "員工認購股數", "原股東認購數", "按持股比例千股認購"
+                           ]
+        df[float_name_list] = df[float_name_list].astype(str).apply(lambda s: s.str.replace(',', '')).astype(float)
+        # set stock id
+        df['stock_id'] = df['代號']
+        # set dates
+        dates = df['除權息日期'].str.split('/')
+        dates = (dates.str[0].astype(int) + 1911).astype(str) + '/' + dates.str[1] + '/' + dates.str[2]
+        df['date'] = pd.to_datetime(dates)
+        df['divide_ratio'] = df['除權息前收盤價'] / df['開盤競價基準']
+        df = df.drop(columns=['除權息日期', '代號', '權值', '息值', '漲停價格', '跌停價格', '減除股利參考價', '現金股利',
+                              '每千股無償配股', '現金增資股數',
+                              '現金增資認購價', '公開承銷股數', '員工認購股數', '原股東認購數', '按持股比例千股認購'])
+        df.columns = ['stock_name', 'divide_before', 'divide_after', 'divide_value', 'divide_category', 'divide_open',
+                      'stock_id', 'date', 'divide_ratio']
+        return df
+
+    def twse_cap_reduction(self):
+        datestr = datetime.datetime.now().strftime('%Y%m%d')
+        res3 = requests.get(
+            "https://www.twse.com.tw/exchangeReport/TWTAUU?response=csv&strDate=" + str(self.year) + "0101&endDate="
+            + datestr + "&_=1651597854043")
+        df = pd.read_csv(StringIO(res3.text), header=1)
+        df = df.dropna(thresh=5).dropna(how='all', axis=1)
+        dates = (df['恢復買賣日期'].str.split('/').str[0].astype(int) + 1911).astype(str) + df['恢復買賣日期'].str[3:]
+        df['date'] = pd.to_datetime(dates, errors='coerce')
+        df['stock_id'] = df['股票代號'].astype(str)
+        df['開盤競價基準'] = [a if a > 0 else b for a, b in zip(df['開盤競價基準'], df['恢復買賣參考價'])]
+        df['divide_ratio'] = df['停止買賣前收盤價格'] / df['開盤競價基準']
+        df = df.drop(columns=['恢復買賣日期', '股票代號', '漲停價格', '跌停價格', '詳細資料'])
+        df.columns = ['stock_name', 'divide_before', 'divide_after', 'divide_open', 'divide_value', 'divide_category',
+                      'date', 'stock_id', 'divide_ratio']
+        df['divide_value'] = None
+        return df
+
+    def otc_cap_reduction(self):
+        res4 = requests.get(
+            "https://www.tpex.org.tw/web/stock/exright/revivt/revivt_result.php?l=zh-tw&d=" + str(
+                self.year - 1911) + "/01/01&ed="
+            + self.otc_date() + "&_=1651611342446")
+        df = pd.DataFrame(json.loads(res4.text)['aaData'])
+        name = ['恢復買賣日期', '股票代號', '股票名稱', '最後交易之收盤價格',
+                '減資恢復買賣開始日參考價格', '漲停價格', '跌停價格', '開始交易基準價', '除權參考價', '減資源因', '詳細資料']
+        float_name_list = ['最後交易之收盤價格', '減資恢復買賣開始日參考價格', '漲停價格', '跌停價格', '開始交易基準價', '除權參考價']
+        df.columns = name
+        df[float_name_list] = df[float_name_list].astype(str).apply(lambda s: s.str.replace(',', '')).astype(float)
+        df['stock_id'] = df['股票代號'].astype(str)
+        dates = (df['恢復買賣日期'].astype(str).str[:-4].astype(int) + 1911).astype(str) + \
+                df['恢復買賣日期'].astype(str).str[-4:]
+        df['date'] = pd.to_datetime(dates, errors='coerce')
+        df['開始交易基準價'] = [a if a > 0 else b for a, b in zip(df['開始交易基準價'], df['減資恢復買賣開始日參考價格'])]
+        df['divide_ratio'] = df['最後交易之收盤價格'] / df['開始交易基準價']
+        df = df.drop(columns=['恢復買賣日期', '股票代號', '漲停價格', '跌停價格', '詳細資料'])
+        df.columns = ['stock_name', 'divide_before', 'divide_after', 'divide_open', 'divide_value', 'divide_category',
+                      'stock_id', 'date', 'divide_ratio']
+        df['divide_value'] = None
+        return df
+
+    def crawl_main(self):
+        df = pd.concat(
+            [self.twse_divide_ratio(), self.otc_divide_ratio(), self.twse_cap_reduction(),
+             self.otc_cap_reduction()], sort=False)
+        df = df[df['divide_ratio'] > 0]
+        return df
