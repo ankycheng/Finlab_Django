@@ -6,6 +6,10 @@ from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.conf import settings
 from sqlalchemy import create_engine
 from django.db import models
+import logging
+
+# Get an instance of a logger
+logger = logging.getLogger(__name__)
 
 # """""
 # DB connection
@@ -69,7 +73,7 @@ def table_latest_date(conn, table):
         cursor = list(conn.execute('SELECT date FROM ' + table + ' ORDER BY date DESC LIMIT 1;'))
         return cursor[0][0]
     except IndexError:
-        return print("No Data")
+        return logger.info("No Data")
 
 
 def table_earliest_date(conn, table):
@@ -77,7 +81,7 @@ def table_earliest_date(conn, table):
         cursor = list(conn.execute('SELECT date FROM ' + table + ' ORDER BY date ASC LIMIT 1;'))
         return cursor[0][0]
     except IndexError:
-        return print("No Data")
+        return logger.info("No Data")
 
 
 def in_date_list(conn, model_name, check_date):
@@ -89,7 +93,7 @@ def in_date_list(conn, model_name, check_date):
         else:
             return False
     except IndexError:
-        print("No Data in table,start to init import table. ")
+        logger.info("No Data in table,start to init import table. ")
         return False
 
 
@@ -172,7 +176,7 @@ class AddToSQL:
                 try:
                     bulk_create_func(model_name, columns_list)
                 except Exception as e:
-                    print(f"error{' '}{e}{' '}Stock_id:{item['stock_id']}")
+                    logger.error(f"error{' '}{e}{' '}Stock_id:{item['stock_id']}")
                     pass
         else:
             if jump_create is True:
@@ -202,20 +206,22 @@ class AddToSQL:
                         except ObjectDoesNotExist:
                             bulk_create_func(model_name, columns_list)
                         except Exception as e:
-                            print(f"error{' '}{e}{' '}Stock_id:{item['stock_id']}")
+                            logger.error(f"error{' '}{e}{' '}Stock_id:{item['stock_id']}")
                             pass
                     else:
                         bulk_create_func(model_name, columns_list)
         # Process bulk
         model_name.objects.bulk_create(bulk_create_data, batch_size=1000)
         if 'date' in columns_list:
-            print_date = df['date'].values[0]
+            logger.info_date = df['date'].values[0]
         else:
-            print_date = datetime.datetime.now()
-        print(f"Finish{' '}{model_name}{'date'}{':'}{print_date}{' '}{'bulk_create'}{':'}{len(bulk_create_data)}")
+            logger.info_date = datetime.datetime.now()
+        logger.info(
+            f"Finish{' '}{model_name}{'date'}{':'}{logger.info_date}{' '}{'bulk_create'}{':'}{len(bulk_create_data)}")
         update_fields_area = [field.name for field in model_name._meta.fields if field.name != 'id']
         model_name.objects.bulk_update(bulk_update_data, update_fields_area, batch_size=1000)
-        print(f"Finish{' '}{model_name}{'date'}{':'}{print_date}{' '}{'bulk_update'}{':'}{len(bulk_update_data)}")
+        logger.info(
+            f"Finish{' '}{model_name}{'date'}{':'}{logger.info_date}{' '}{'bulk_update'}{':'}{len(bulk_update_data)}")
 
 
 class CrawlerProcess:
@@ -255,23 +261,23 @@ class CrawlerProcess:
                 try:
                     AddToSQL.add_to_sql(self.model_name, df, self.pk_columns, self.fk_columns, self.jump_create,
                                         self.jump_update)
-                    print(f'Finish {d} Data')
+                    logger.info(f'Finish {d} Data')
                 # holiday is blank
                 except AttributeError:
-                    print(f'fail, check if {d} is a holiday')
+                    logger.error(f'fail, check if {d} is a holiday')
             else:
                 try:
                     if df is False:
-                        print(f'fail, check if {d} is a holiday')
+                        logger.info(f'fail, check if {d} is a holiday')
                 # holiday is blank
                 except AttributeError:
-                    print(f'fail, check if {d} is a holiday')
+                    logger.error(f'fail, check if {d} is a holiday')
             time.sleep(self.time_sleep)
 
     @staticmethod
     def monthly_import(start_date, end_date, deadline):
         if end_date.day > deadline:
-            print(f"day > {deadline},Finish Update Work")
+            logger.info(f"day > {deadline},Finish Update Work")
             return None
         # add 15 day to append month range,because deadline is 10,if the day is 1-9,it need update
         end_date = end_date + datetime.timedelta(days=deadline)
@@ -292,13 +298,13 @@ class CrawlerProcess:
                 elif self.range_date == 'month_range':
                     date_list = self.monthly_import(start_date, end_date, deadline)
                 else:
-                    print(f"Finish Update Work")
+                    logger.info(f"Finish Update Work")
                     return None
                 self.crawl_process(date_list)
             else:
-                print(f"The start_date > your end_date,please modify your start_date <={end_date} .")
+                logger.info(f"The start_date > your end_date,please modify your start_date <={end_date} .")
         except Exception as e:
-            print(e)
+            logger.error(e)
             return None
 
     # 進度判斷
@@ -336,11 +342,11 @@ class CrawlerProcess:
                     date_list = season_range(start_date, end_date)
                 self.crawl_process(date_list)
             elif working_process == 1:
-                print(f"Finish Update Work")
+                logger.info("Finish Update Work")
                 return None
             else:
-                print(f"The table_latest_date > your setting date,please modify your setting date >{last_day} .")
+                logger.info(f"The table_latest_date > your setting date,please modify your setting date >{last_day} .")
                 return None
         except Exception as e:
-            print(e)
+            logger.error(e)
             return None
