@@ -1,7 +1,7 @@
 # Finlab_Django
 
 ## 專案目的
-1. 整合Hahow Finlab課程所學內容，以網頁化系統性編排
+1. 整合Hahow Finlab課程所學內容，以Django為中心框架，架構系統
 2. 模組化爬蟲程式
 3. 選股視覺化工具
 4. 策略與模型選股呈現
@@ -10,21 +10,42 @@
 7. 資料整合API
 
 ## 主要框架與套件
-1. Django2.2:網頁後端
+![](https://i.imgur.com/6cute0O.jpg)
+
+
+
+
+1. Django 3.0:網頁後端
     * 官方文件連結:
-    https://docs.djangoproject.com/en/2.2/
-    - **django restful framework**：處理API
+    https://docs.djangoproject.com/en/3.0/
+    - **fastapi**：取代django restful framework處理API，更簡潔高效，支援異步，使用mount功能將django-admin納入unicorn server-https://fastapi.tiangolo.com/
     - **django-extensions**：在Django環境內使用Jupyter編輯與測試程式，方便與課程內容接軌
     - **django-import-export**：後台資料匯出匯入
-3. Pandas:爬蟲、資料處理
+    - **django-Q**：排程管理，使用django-admin設定tasks
+3. Pandas:爬蟲、資料計算
 4. MySQL:資料庫
     - **sqlalchemy**
-    - **PyMySQL==0.9.3**：一定要此版本，新版有難解的坑。
-    需要手動解決 Django 2.2 的 MySql 問題， 
-    問題解法： https://blog.csdn.net/weixin_33127753/article/details/89100552
-6. Swagger:API文件編輯
-7. Git:版本控制
-8. IDE:Pycharm or VScode
+    - **PyMySQL==0.9.3**
+    需要手動解決 Django的 MySql 問題，參考 https://blog.csdn.net/weixin_33127753/article/details/89100552
+    
+```
+    問題解法： 
+    1.brew install mysql
+    2. 在以下路徑venv/lib/python3.6/site-packages/django/db/backends/mysql/base.py
+    把下列程式區塊註解
+    
+    if version < (1, 3, 13):
+   raise ImproperlyConfigured(
+       'mysqlclient 1.3.13 or newer is required; you have %s.'
+       % Database.__version__
+   )
+```
+   
+   
+4. Swagger:API文件編輯，Fastapi內建測試文檔
+5. Git:版本控制
+6. IDE:Pycharm or VScode
+7. 前後端分離開發
 
 ## 安裝流程
 
@@ -34,11 +55,17 @@
 ```
 virtualenv venv
 source venv/bin/activate
+brew install mysql
 ```
 3. 安裝套件module目錄
 `pip install -r requirements.txt`
 4. config.jason檔設定資料庫連線資訊，路徑放在Finlab-Django/stock_fleets/
-
+## 開發環境
+1. develope:在manage.py中預設的runserver環境
+2. production:上線環境，連結到正式資料庫，下以下指令進入環境
+```
+python manage.py migrate --settings=stock_fleets.settings.production
+```
 ## 常用Django指令
 ```
 # 啟動網頁伺服器
@@ -64,12 +91,17 @@ python manage.py migrate
 
 #啟用python編輯器
 python manage.py shell
+
+# 啟用fastapi
+uvicorn stock_fleets.wsgi:app --reload
+
+# 啟用django-Q
+python manage.py qcluster
 ```
 
 ## 專案架構
 1. crawlers app(爬蟲相關)
 * finlab dir(工具集):
-
 * pioneers:爬蟲部隊
     - import_tools:爬蟲資料匯入工具
     - -CrawlerProcess物件選擇抓取時間設定
@@ -153,7 +185,7 @@ python manage.py shell
 * 小台期貨籌碼
 * 台指特法、十大籌碼
 * 原物料
-### 6. 管理面:
+### 6. 管理工具:
 * 爬蟲模組
 * 資料提取、選股API
 * 視覺化模組
@@ -163,7 +195,3 @@ python manage.py shell
 * 後台編輯Admin
 * 網站部署
 * APP或第三方部署、推播
-
-
-
-
