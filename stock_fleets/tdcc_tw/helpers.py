@@ -1,9 +1,9 @@
-from components.backend_api import OrmBasicFilter
+from components.backend_api import DataFilter
 from crawlers.models import StockPriceTW
 import pandas as pd
 
 
-class ReloadTdccTW(OrmBasicFilter):
+class ReloadTdccTW(DataFilter):
     # little:100-down,medium:100-400,big:400-1000,super:1000-up
     group_list = ['little', 'medium', 'big', 'super', 'total']
 

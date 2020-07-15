@@ -1,5 +1,6 @@
 import pandas as pd
 from crawlers.finlab.import_tools import engine
+import numpy as np
 
 
 class GetModelDateRangeBySlice:
@@ -21,9 +22,9 @@ class GetModelDateRangeBySlice:
         return cursor
 
 
-class OrmBasicFilter(GetModelDateRangeBySlice):
-    def __init__(self, model, stock_id=None, start_date=None, end_date=None, offset=0, limit=100000, recent=True,
-                 fields=None):
+class DataFilter(GetModelDateRangeBySlice):
+    def __init__(self, model, fields=None, offset=0, limit=100000, stock_id=None, start_date=None, end_date=None,
+                 recent=True):
         super().__init__(model, offset, limit, recent)
         self.stock_id = stock_id
         self.start_date = start_date
@@ -47,8 +48,7 @@ class OrmBasicFilter(GetModelDateRangeBySlice):
     def get_orm_data(self):
         fs = self.basic_filter_set()
         if self.fields is not None:
-            fields = self.fields.split('-')
-            orm_data = self.model.objects.filter(**fs).order_by('date').values(*fields)
+            orm_data = self.model.objects.filter(**fs).order_by('date').values(*self.fields)
         else:
             orm_data = self.model.objects.filter(**fs).order_by('date').values()
         return orm_data
@@ -56,3 +56,16 @@ class OrmBasicFilter(GetModelDateRangeBySlice):
     def get_dataframe(self):
         df = pd.DataFrame(self.get_orm_data())
         return df
+
+    def get_pivot(self):
+        df = self.get_dataframe()
+        if len(self.fields[2:]) > 2:
+            pivot_set = {}
+            for f in self.fields[2:]:
+                table = pd.pivot_table(df, index=['date'], columns=['stock_id'], values=f)
+                pivot_set[f] = table
+        else:
+            pivot_set = pd.pivot_table(df, index=['date'], columns=['stock_id'], values=self.fields[-1])
+        return pivot_set
+
+
