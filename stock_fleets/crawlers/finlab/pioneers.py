@@ -115,8 +115,8 @@ class CrawlStockPriceTW:
                                 "前日均價": "open_price", "最後": "close_price",
                                 "最高": "high_price", "最低": "low_price"})
         # solve " "
-        df['stock_id'] = df['stock_id'].apply(lambda s: s[:s.index(' ')] if '" "' in s else s)
-        df['stock_name'] = df['stock_name'].apply(lambda s: s[:s.index(' ')] if '" "' in s else s)
+        df['stock_id'] = df['stock_id'].apply(lambda s: s[:s.index('  ')] if '  ' in s else s)
+        df['stock_name'] = df['stock_name'].apply(lambda s: s[:s.index('  ')] if '  ' in s else s)
         df = df[df["stock_id"] != "合計"]
         df['market'] = 'rotc'
         return df
@@ -1148,7 +1148,7 @@ class CrawlStockDivideRatioTW:
         df = df.dropna(thresh=5).dropna(how='all', axis=1)
         dates = (df['恢復買賣日期'].str.split('/').str[0].astype(int) + 1911).astype(str) + df['恢復買賣日期'].str[3:]
         df['date'] = pd.to_datetime(dates, errors='coerce')
-        df['stock_id'] = df['股票代號'].astype(str)
+        df['stock_id']=[s[:s.index('.')] if '.' in s else s for s in df['股票代號'].astype(str)]
         df['開盤競價基準'] = [a if a > 0 else b for a, b in zip(df['開盤競價基準'], df['恢復買賣參考價'])]
         df['divide_ratio'] = df['停止買賣前收盤價格'] / df['開盤競價基準']
         df = df.drop(columns=['恢復買賣日期', '股票代號', '漲停價格', '跌停價格', '詳細資料'])

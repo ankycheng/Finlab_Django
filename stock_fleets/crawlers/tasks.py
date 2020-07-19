@@ -1,4 +1,4 @@
-# python manage.py qcluster
+# python manage.py qcluster, activate Django-Q
 from crawlers.finlab.pioneers import *
 from crawlers.models import *
 from crawlers.finlab.import_tools import *

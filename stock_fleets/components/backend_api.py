@@ -1,6 +1,5 @@
 import pandas as pd
 from crawlers.finlab.import_tools import engine
-import numpy as np
 
 
 class GetModelDateRangeBySlice:
@@ -57,15 +56,17 @@ class DataFilter(GetModelDateRangeBySlice):
         df = pd.DataFrame(self.get_orm_data())
         return df
 
+    # stock_id,date must in fields head
     def get_pivot(self):
         df = self.get_dataframe()
-        if len(self.fields[2:]) > 2:
+        col = [i for i in self.fields if i not in ['stock_id', 'date']]
+        if len(col) > 2:
             pivot_set = {}
-            for f in self.fields[2:]:
+            for f in col:
                 table = pd.pivot_table(df, index=['date'], columns=['stock_id'], values=f)
                 pivot_set[f] = table
         else:
-            pivot_set = pd.pivot_table(df, index=['date'], columns=['stock_id'], values=self.fields[-1])
+            pivot_set = pd.pivot_table(df, index=['date'], columns=['stock_id'], values=col[0])
         return pivot_set
 
 

@@ -1,13 +1,9 @@
 from components.backend_api import DataFilter
 import numpy as np
-from crawlers.models import *
+from crawlers.models import StockDivideRatioTW
 
 
-class GetAdj:
-    def __init__(self, col_name, offset=0, limit=100000):
-        self.col_name = col_name
-        self.offset = int(offset)
-        self.limit = int(limit)
+class GetAdj(DataFilter):
 
     @staticmethod
     def adj_holiday(item, df):
@@ -20,12 +16,14 @@ class GetAdj:
         return df
 
     def get(self):
-        columns = ['stock_id', 'date', self.col_name]
-        price = DataFilter(StockPriceTW, columns)
+        columns = ['stock_id', 'date', self.fields]
+        query_set = {'model': self.model, 'fields': columns, 'offset': self.offset, 'limit': self.limit,
+                     'start_date': self.start_date, 'end_date': self.end_date}
+        price = DataFilter(**query_set)
         item = price.get_pivot()
         divide_ratio = DataFilter(StockDivideRatioTW, ['stock_id', 'date', 'divide_ratio'])
         ratio = self.adj_holiday(item, divide_ratio.get_pivot())
         divide_ratio = (ratio.reindex_like(item).fillna(1).cumprod())
         divide_ratio[np.isinf(divide_ratio)] = 1
-        result = (item * divide_ratio)[-self.offset:-self.offset + self.limit].dropna(axis=1)
+        result = (item * divide_ratio)
         return result
