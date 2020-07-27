@@ -36,7 +36,7 @@ class CrawlStockPriceTW:
                                 "成交股數": "turnover_vol", "成交金額": "turnover_price",
                                 "開盤價": "open_price", "收盤價": "close_price",
                                 "最高價": "high_price", "最低價": "low_price"})
-        df['market'] = 'twse'
+        df['market'] = 'sii'
         return df
 
     @staticmethod
@@ -211,7 +211,7 @@ class CrawlCompanyBasicInfoTW:
             res.encoding = "utf-8"
             df = pd.read_html(res.text)
             df = pd.DataFrame(df[0])
-            df['market'] = '上市' if market == 'sii' else '上櫃' if market == 'otc' else '興櫃'
+            df['market'] = market
             data.append(df)
         df2 = pd.concat(data, sort=False)
         df2 = df2.astype(str)

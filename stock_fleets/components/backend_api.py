@@ -23,11 +23,12 @@ class GetModelDateRangeBySlice:
 
 class DataFilter(GetModelDateRangeBySlice):
     def __init__(self, model, fields=None, offset=0, limit=100000, stock_id=None, start_date=None, end_date=None,
-                 recent=True):
+                 market=None, recent=True):
         super().__init__(model, offset, limit, recent)
         self.stock_id = stock_id
         self.start_date = start_date
         self.end_date = end_date
+        self.market = market
         self.fields = fields
 
     def basic_filter_set(self):
@@ -38,6 +39,8 @@ class DataFilter(GetModelDateRangeBySlice):
             query['date__gte'] = self.start_date
         if self.end_date is not None:
             query['date__lte'] = self.end_date
+        if self.market is not None:
+            query['market__in'] = self.market
         if (self.offset is not 0) and (self.limit is not 100000):
             date_range = self.get_date_list(engine)
             query['date__gte'] = date_range[0]
