@@ -25,7 +25,7 @@ decorator==4.4.2
 defusedxml==0.6.0
 diff-match-patch==20181111
 distributed==2.15.2
-Django==3.0.5
+Django==3.0.7
 django-apscheduler==0.3.0
 django-crontab==0.7.1
 django-extensions==2.2.9
