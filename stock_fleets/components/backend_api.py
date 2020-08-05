@@ -63,7 +63,7 @@ class DataFilter(GetModelDateRangeBySlice):
     def get_pivot(self):
         df = self.get_dataframe()
         col = [i for i in self.fields if i not in ['stock_id', 'date']]
-        if len(col) > 2:
+        if len(col) > 1:
             pivot_set = {}
             for f in col:
                 table = pd.pivot_table(df, index=['date'], columns=['stock_id'], values=f)
