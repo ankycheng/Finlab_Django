@@ -1,5 +1,6 @@
 importRule/
 #config.json
+*/config.json
 chromedriver
 *.pkl
 Innopro_crawl_data/

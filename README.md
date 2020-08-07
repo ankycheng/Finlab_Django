@@ -59,7 +59,16 @@ brew install mysql
 ```
 3. 安裝套件module目錄
 `pip install -r requirements.txt`
-4. config.jason檔設定資料庫連線資訊，路徑放在Finlab-Django/stock_fleets/
+    - 需要先在作業系統安裝 ta-lib ，否則會報錯， Mac 解決方式：`brew install ta-lib`，參考：[python 安裝 talib 報錯](https://www.jianshu.com/p/a9f47597b15d)
+        ```
+        talib/_ta_lib.c:526:10: fatal error: 'ta-lib/ta_defs.h' file not found
+        #include "ta-lib/ta_defs.h"
+                ^~~~~~~~~~~~~~~~~~
+        1 error generated.
+        error: command 'xcrun' failed with exit status 1
+        ```
+4. 複製 `config_example.json`，並重新命名為 `config.json` ，在此設定資料庫連線資訊，路徑放在Finlab-Django/stock_fleets/
+5. 在 `stock_fleets` 內手動新增 `/static` 資料夾
 ## 開發環境
 1. develope:在manage.py中預設的runserver環境
 2. production:上線環境，連結到正式資料庫，下以下指令進入環境

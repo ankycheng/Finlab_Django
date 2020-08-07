@@ -1,6 +1,6 @@
 {
     "DBACCOUNT": "root",
-    "DBPASSWORD": "benbilly3@",
+    "DBPASSWORD": "password@mysql",
     "DBHOST": "localhost",
     "DBPORT": 3306,
     "DBNAME": "finlab_django",

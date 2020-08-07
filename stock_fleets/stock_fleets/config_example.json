@@ -1,0 +1,8 @@
+{
+    "DBACCOUNT": "",
+    "DBPASSWORD": "",
+    "DBHOST": "localhost",
+    "DBPORT": 3306,
+    "DBNAME": "",
+    "DBNAME_DEV": ""
+}
