@@ -1,8 +1,0 @@
-{
-    "DBACCOUNT": "root",
-    "DBPASSWORD": "password@mysql",
-    "DBHOST": "localhost",
-    "DBPORT": 3306,
-    "DBNAME": "finlab_django",
-    "DBNAME_DEV": "finlab_django_dev"
-}
